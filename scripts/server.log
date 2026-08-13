@@ -1,0 +1,21 @@
+   ▲ Next.js 15.5.23
+   - Local:        http://localhost:3100
+   - Network:      http://192.168.100.2:3100
+
+ ✓ Starting...
+ ✓ Ready in 625ms
+[generate] provider=Mistral key=0 model=mistral-small-latest topics=6 terms=20 quiz=20
+[generate] ai ok docs=1 words=184 quiz=20 ms=20108
+[generate] provider=Mistral key=0 model=mistral-small-latest topics=3 terms=20 quiz=50
+[generate] ai ok docs=1 words=184 quiz=50 ms=33297
+[generate] provider=Mistral key=0 model=mistral-small-latest topics=3 terms=16 quiz=20
+[generate] ai ok docs=1 words=184 quiz=20 ms=18850
+[generate] ai failed, falling back: All AI providers failed: Gemini[key 0] (Gemini API error (HTTP 404)); Gemini[key 1] (Gemini API error (HTTP 404)); Groq[key 0] (Provider API error (HTTP 413)); OpenRouter[key 0] (Provider API error (HTTP 404)); Mistral[key 0] (The operation was aborted due to timeout)
+[generate] offline docs=1 words=184 quiz=50
+[generate] provider=Mistral key=0 model=mistral-small-latest topics=4 terms=8 quiz=20
+[generate] ai ok docs=2 words=76 quiz=20 ms=16982
+[generate] provider=Mistral key=0 model=mistral-small-latest topics=5 terms=25 quiz=20
+[generate] ai ok docs=1 words=933 quiz=20 ms=34202
+[generate] provider=Mistral key=0 model=mistral-small-latest topics=4 terms=9 quiz=70
+[generate] ai ok docs=1 words=153 quiz=70 ms=44042
+^C^CTerminate batch job (Y/N)? 
