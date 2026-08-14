@@ -42,7 +42,25 @@ export default function TermsTable({ terms }: { terms: TermDefinition[] }) {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700">
-        <table className="w-full text-left text-sm">
+        <ul className="divide-y divide-zinc-100 bg-white md:hidden dark:divide-zinc-800 dark:bg-zinc-900">
+          {filtered.map((t) => (
+            <li key={t.id} className="px-4 py-3">
+              <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                {t.term}
+              </p>
+              {t.sourceDoc && (
+                <p className="mt-0.5 text-[10px] text-zinc-400 dark:text-zinc-500">
+                  {t.sourceDoc}
+                </p>
+              )}
+              <p className="mt-1 text-sm leading-relaxed text-zinc-600 dark:text-zinc-400">
+                {t.definition}
+              </p>
+            </li>
+          ))}
+        </ul>
+
+        <table className="hidden w-full text-left text-sm md:table">
           <thead>
             <tr className="border-b border-zinc-200 bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-800/80">
               <th className="px-5 py-3 text-xs font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">

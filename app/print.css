@@ -1,0 +1,294 @@
+/* Study Reviewer print stylesheet
+   Plain CSS (no Tailwind) so the same file powers both the browser-print
+   path (bundled via layout.tsx) and the /api/export-pdf route (read from
+   disk and inlined). The API route renders with print media, matching the
+   browser's Print dialog.
+
+   Design system: restrained academic reviewer. One accent (teal), used only
+   on section rules and table headers. Georgia serif headings, Helvetica
+   body. Generous margins. Running header + footer via @page margin boxes
+   (supported in Chromium >= 131; requires Chromium 1217+). */
+
+.sr-panel {
+  display: none;
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 18mm 20mm 16mm 20mm;
+
+    @top-left {
+      content: string(sr-title);
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 8pt;
+      font-weight: 500;
+      letter-spacing: 0.02em;
+      color: var(--sr-muted);
+      border-bottom: 1.2pt solid var(--sr-accent);
+      padding-bottom: 4pt;
+      width: 100%;
+    }
+
+    @bottom-left {
+      content: "Study Reviewer Generator";
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 7.5pt;
+      color: var(--sr-muted);
+      border-top: 0.5pt solid var(--sr-hairline);
+      padding-top: 3pt;
+    }
+
+    @bottom-right {
+      content: "Page " counter(page) " of " counter(pages);
+      font-family: Helvetica, Arial, sans-serif;
+      font-size: 7.5pt;
+      color: var(--sr-muted);
+      border-top: 0.5pt solid var(--sr-hairline);
+      padding-top: 3pt;
+    }
+  }
+
+  :root {
+    --sr-accent: #1f5f5a;
+    --sr-accent-deep: #174a46;
+    --sr-paper: #ffffff;
+    --sr-ink: #1b2430;
+    --sr-body: #33404d;
+    --sr-muted: #5b6672;
+    --sr-hairline: #e2e6e9;
+    --sr-row: #ffffff;
+  }
+
+  html,
+  body {
+    position: relative;
+    background: var(--sr-paper) !important;
+    color: var(--sr-ink) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .sr-panel,
+  .sr-panel * {
+    visibility: visible;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .sr-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    box-sizing: border-box;
+    display: block !important;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 10.5pt;
+    line-height: 1.6;
+    color: var(--sr-body);
+  }
+
+  .sr-panel h1,
+  .sr-panel h2,
+  .sr-panel h3,
+  .sr-panel th,
+  .sr-panel tr {
+    break-after: avoid;
+    break-inside: avoid;
+  }
+
+  .sr-panel p,
+  .sr-panel li,
+  .sr-panel td,
+  .sr-panel th {
+    orphans: 3;
+    widows: 3;
+  }
+
+  .sr-doc-title {
+    string-set: sr-title content();
+  }
+
+  /* ---------------------------------------------------------------
+     Page 1 document title block (not a cover page)
+     --------------------------------------------------------------- */
+
+  .sr-doc-head {
+    margin-bottom: 22pt;
+  }
+
+  .sr-doc-title {
+    margin: 0 0 4pt;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 24pt;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--sr-ink);
+  }
+
+  .sr-doc-meta {
+    margin: 0 0 12pt;
+    font-size: 9pt;
+    letter-spacing: 0.04em;
+    color: var(--sr-muted);
+  }
+
+  .sr-doc-head .rule,
+  .sr-section-heading .rule {
+    display: block;
+    width: 100%;
+    height: 1.2pt;
+    background: var(--sr-accent);
+  }
+
+  /* ---------------------------------------------------------------
+     Sections
+     --------------------------------------------------------------- */
+
+  .sr-section {
+    margin-bottom: 20pt;
+  }
+
+  .sr-section-heading {
+    margin: 0 0 12pt;
+  }
+
+  .sr-section-heading h2 {
+    margin: 0 0 7pt;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 15pt;
+    font-weight: 700;
+    color: var(--sr-ink);
+  }
+
+  /* Key takeaways callout */
+
+  .sr-callout {
+    margin-top: 14pt;
+    padding: 11pt 13pt;
+    background: var(--sr-row);
+    border-left: 3pt solid var(--sr-accent);
+    break-inside: avoid;
+  }
+
+  .sr-callout h3 {
+    margin: 0 0 6pt;
+    font-size: 8pt;
+    font-weight: 600;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--sr-accent-deep);
+  }
+
+  .sr-callout ul {
+    margin: 0;
+    padding-left: 14pt;
+  }
+
+  .sr-callout li {
+    font-size: 10pt;
+    line-height: 1.55;
+    margin-bottom: 2.5pt;
+  }
+
+  /* ---------------------------------------------------------------
+     Topics
+     --------------------------------------------------------------- */
+
+  .sr-topic {
+    break-inside: avoid;
+    margin-bottom: 16pt;
+  }
+
+  .sr-topic-label {
+    margin-bottom: 3pt;
+    font-size: 7.5pt;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--sr-muted);
+  }
+
+  .sr-topic-title {
+    margin: 0 0 3pt;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 13pt;
+    font-weight: 700;
+    color: var(--sr-ink);
+  }
+
+  .sr-topic-summary {
+    margin: 0;
+    color: var(--sr-body);
+  }
+
+  .sr-detail {
+    margin: 9pt 0 0 12pt;
+    break-inside: avoid;
+  }
+
+  .sr-detail-head {
+    margin: 0 0 3pt;
+    font-size: 10.5pt;
+    font-weight: 600;
+    color: var(--sr-ink);
+  }
+
+  .sr-detail-points {
+    margin: 0;
+    padding-left: 14pt;
+  }
+
+  .sr-detail-points li {
+    font-size: 10.5pt;
+    line-height: 1.55;
+    margin-bottom: 2pt;
+  }
+
+  /* ---------------------------------------------------------------
+     Tables (terms, key facts): accent header, alternating row tint,
+     outer box only, no inner grid lines
+     --------------------------------------------------------------- */
+
+  .sr-table {
+    width: 100%;
+    border-collapse: collapse;
+    border: 1pt solid var(--sr-hairline);
+    font-size: 9.5pt;
+  }
+
+  .sr-table thead {
+    display: table-header-group;
+  }
+
+  .sr-table th {
+    background: var(--sr-accent);
+    color: #ffffff;
+    text-align: left;
+    font-weight: 600;
+    padding: 6pt 9pt;
+    border: none;
+    border-bottom: 1pt solid var(--sr-accent-deep);
+  }
+
+  .sr-table td {
+    padding: 5.5pt 9pt;
+    border: none;
+    vertical-align: top;
+    line-height: 1.45;
+  }
+
+  .sr-table tbody tr:nth-child(even) {
+    background: var(--sr-row);
+  }
+
+  .sr-table .sr-term {
+    font-weight: 600;
+    color: var(--sr-ink);
+  }
+}

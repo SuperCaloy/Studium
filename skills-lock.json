@@ -31,6 +31,12 @@
       "skillPath": "skills/javascript-typescript-jest/SKILL.md",
       "computedHash": "0073d19ab0275eb6a8200aced6789a53744667bd717b5d1f44ce708a1740e5d4"
     },
+    "minimax-pdf": {
+      "source": "minimax-ai/skills",
+      "sourceType": "github",
+      "skillPath": "skills/minimax-pdf/SKILL.md",
+      "computedHash": "b313bfd30ed812a0bdd7fa5fb2a015a9a0a3661e26e6e9ac1ec7e50d8126aae0"
+    },
     "pdf": {
       "source": "anthropics/skills",
       "sourceType": "github",

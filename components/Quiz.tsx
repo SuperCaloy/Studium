@@ -15,7 +15,6 @@ interface Props {
   bank: QuizQuestion[];
   questionTarget: number;
   onTargetChange: (n: number) => void;
-  onRegenerate: (n: number) => void;
 }
 
 const TARGET_OPTIONS = [10, 20, 30, 50, 70];
@@ -31,7 +30,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 type Status = "setup" | "running" | "finished";
 
-export default function Quiz({ bank, questionTarget, onTargetChange, onRegenerate }: Props) {
+export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
   const [status, setStatus] = useState<Status>("setup");
   const [target, setTarget] = useState(questionTarget);
   const [session, setSession] = useState<QuizQuestion[]>([]);
@@ -71,6 +70,13 @@ export default function Quiz({ bank, questionTarget, onTargetChange, onRegenerat
     onTargetChange(n);
   };
 
+  const maxAvailable = Math.min(70, bank.length);
+  const availableTargets = (() => {
+    const base = TARGET_OPTIONS.filter((n) => n <= maxAvailable);
+    return base.length > 0 ? base : maxAvailable > 0 ? [maxAvailable] : [];
+  })();
+  const activeTarget = Math.max(1, Math.min(target, maxAvailable));
+
   if (bank.length === 0) {
     return (
       <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
@@ -94,17 +100,17 @@ export default function Quiz({ bank, questionTarget, onTargetChange, onRegenerat
           shuffled on every attempt.
         </p>
 
-        <div className="mt-5">
+          <div className="mt-5">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
             Number of questions
           </p>
           <div className="flex flex-wrap justify-center gap-2">
-            {TARGET_OPTIONS.map((n) => (
+            {availableTargets.map((n) => (
               <button
                 key={n}
                 onClick={() => chooseTarget(n)}
                 className={`rounded-lg border px-4 py-2 text-sm font-semibold transition ${
-                  target === n
+                  activeTarget === n
                     ? "border-brand bg-brand text-white"
                     : "border-zinc-200 text-zinc-600 hover:border-brand dark:border-zinc-700 dark:text-zinc-300"
                 }`}
@@ -114,22 +120,14 @@ export default function Quiz({ bank, questionTarget, onTargetChange, onRegenerat
             ))}
           </div>
           <p className="mt-2 text-xs text-zinc-400">
-            Target: {target} · Available: {bank.length}
+            Target: {activeTarget} · Available: {bank.length}
           </p>
-          {target > bank.length && (
-            <button
-              onClick={() => onRegenerate(target)}
-              className="mt-3 w-full rounded-xl bg-brand px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-dark"
-            >
-              Regenerate with {target} questions →
-            </button>
-          )}
         </div>
 
         <button
           onClick={start}
           className="mt-6 w-full rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white transition hover:bg-brand-dark disabled:opacity-40"
-          disabled={target > bank.length}
+          disabled={bank.length === 0}
         >
           Start Quiz →
         </button>
@@ -231,7 +229,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange, onRegenerat
             </p>
             <span className="flex shrink-0 items-center gap-1.5">
               {current.type === "tf" && (
-                <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300">
+                <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-brand dark:bg-brand/20 dark:text-brand-light">
                   True/False
                 </span>
               )}

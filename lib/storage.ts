@@ -1,5 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { ExtractedDocument, ReviewerData } from "./types";
+import { REVIEWER_SCHEMA_VERSION } from "./types";
 
 interface MetaRow {
   key: string;
@@ -69,7 +70,13 @@ export async function clearDocuments(): Promise<void> {
 
 export async function saveReviewer(reviewer: ReviewerData): Promise<void> {
   const db = await getDB();
-  await db.put("reviewers", reviewer);
+  const tx = db.transaction("reviewers", "readwrite");
+  const existing = await tx.store.getAll();
+  for (const r of existing) {
+    if (r.id !== reviewer.id) await tx.store.delete(r.id);
+  }
+  await tx.store.put(reviewer);
+  await tx.done;
 }
 
 export async function loadReviewers(): Promise<ReviewerData[]> {
@@ -80,15 +87,25 @@ export async function loadReviewers(): Promise<ReviewerData[]> {
 export async function loadLatestReviewer(): Promise<ReviewerData | null> {
   const reviewers = await loadReviewers();
   if (reviewers.length === 0) return null;
-  return reviewers.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  const latest = reviewers.sort((a, b) => b.updatedAt - a.updatedAt)[0];
+  if ((latest.version ?? 1) !== REVIEWER_SCHEMA_VERSION) {
+    await clearReviewers();
+    return null;
+  }
+  return latest;
 }
 
-export async function setMeta(key: string, value: unknown): Promise<void> {
+export async function clearReviewers(): Promise<void> {
   const db = await getDB();
-  await db.put("meta", { key, value });
+  await db.clear("reviewers");
 }
-export async function getMeta<T>(key: string): Promise<T | undefined> {
+
+export async function clearAll(): Promise<void> {
   const db = await getDB();
-  const row = await db.get("meta", key);
-  return row?.value as T | undefined;
+  const tx = db.transaction(["documents", "reviewers"], "readwrite");
+  await Promise.all([
+    tx.objectStore("documents").clear(),
+    tx.objectStore("reviewers").clear(),
+  ]);
+  await tx.done;
 }

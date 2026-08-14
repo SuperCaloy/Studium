@@ -4,10 +4,12 @@
 
 :root {
   color-scheme: light;
+  --brand-accent: #0f766e;
 }
 
 .dark {
   color-scheme: dark;
+  --brand-accent: #2dd4bf;
 }
 
 html {
@@ -17,6 +19,22 @@ html {
 body {
   @apply bg-zinc-50 text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 .font-mono,
@@ -45,37 +63,4 @@ pre {
 
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-zinc-400 dark:bg-zinc-600;
-}
-
-@media print {
-  @page {
-    size: A4;
-    margin: 14mm 12mm;
-  }
-
-  body {
-    background: #ffffff !important;
-    color: #111827 !important;
-  }
-
-  body * {
-    visibility: hidden;
-  }
-
-  #print-area,
-  #print-area * {
-    visibility: visible;
-  }
-
-  #print-area {
-    position: absolute;
-    inset: 0;
-    width: 100%;
-    display: block !important;
-  }
-
-  #print-area section,
-  #print-area .mb-4 {
-    break-inside: avoid;
-  }
 }

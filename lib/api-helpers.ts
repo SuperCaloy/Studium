@@ -1,0 +1,125 @@
+import type { NextRequest } from "next/server";
+import type { ExtractedDocument, FileFormat } from "./types";
+
+export const MAX_DOCS = 20;
+export const MAX_TEXT_CHARS = 60000;
+export const MAX_BODY_BYTES = 8 * 1024 * 1024;
+export const MAX_TARGET = 70;
+export const MIN_TARGET = 1;
+
+const RATE_WINDOW_MS = 60_000;
+const RATE_MAX_PER_WINDOW = 15;
+const RATE_TRACKER = new Map<string, { count: number; resetAt: number }>();
+
+export function rateLimited(key: string): boolean {
+  const now = Date.now();
+  const entry = RATE_TRACKER.get(key);
+  if (!entry || entry.resetAt <= now) {
+    RATE_TRACKER.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
+    return false;
+  }
+  entry.count += 1;
+  return entry.count > RATE_MAX_PER_WINDOW;
+}
+
+export function readKeys(base: string): string[] | undefined {
+  const out: string[] = [];
+  for (const suffix of ["", "_2", "_3", "_4", "_5"]) {
+    const raw = process.env[`${base}${suffix}`];
+    if (!raw) continue;
+    for (const part of raw.split(",")) {
+      const k = part.trim();
+      if (k && !out.includes(k)) out.push(k);
+    }
+  }
+  return out.length > 0 ? out : undefined;
+}
+
+export function readSingleKey(base: string): string[] | undefined {
+  const raw = process.env[base]?.trim();
+  return raw ? [raw] : undefined;
+}
+
+export function readModel(base: string): string | undefined {
+  return process.env[`${base}_MODEL`]?.trim() || undefined;
+}
+
+export function clientIp(req: NextRequest): string {
+  const fwd = req.headers.get("x-forwarded-for");
+  if (fwd) return fwd.split(",")[0].trim();
+  const real = req.headers.get("x-real-ip");
+  return real?.trim() || "unknown";
+}
+
+export function originAllowed(req: NextRequest): boolean {
+  const origin = req.headers.get("origin");
+  if (!origin) return true;
+  const host = req.headers.get("host");
+  if (!host) return false;
+  try {
+    const o = new URL(origin);
+    return o.host === host;
+  } catch {
+    return false;
+  }
+}
+
+export function sanitizeDocs(raw: unknown): ExtractedDocument[] | null {
+  if (!Array.isArray(raw)) return null;
+  if (raw.length === 0 || raw.length > MAX_DOCS) return null;
+  const formats: FileFormat[] = ["pdf", "docx", "txt"];
+  const docs: ExtractedDocument[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const d = raw[i];
+    if (!d || typeof d !== "object") return null;
+    const o = d as Record<string, unknown>;
+    const name =
+      typeof o.name === "string" ? o.name.slice(0, 200) : `Document ${i + 1}`;
+    const text = typeof o.text === "string" ? o.text : "";
+    if (text.trim().length < 20) return null;
+    docs.push({
+      id: typeof o.id === "string" ? o.id : `doc-${i}`,
+      name,
+      format: formats.includes(o.format as FileFormat)
+        ? (o.format as FileFormat)
+        : "txt",
+      sizeBytes: typeof o.sizeBytes === "number" ? o.sizeBytes : 0,
+      pageCount: typeof o.pageCount === "number" ? o.pageCount : undefined,
+      paragraphCount:
+        typeof o.paragraphCount === "number" ? o.paragraphCount : undefined,
+      lineCount: typeof o.lineCount === "number" ? o.lineCount : undefined,
+      wordCount: typeof o.wordCount === "number" ? o.wordCount : 0,
+      charCount: typeof o.charCount === "number" ? o.charCount : 0,
+      text: text.slice(0, MAX_TEXT_CHARS),
+      flags: Array.isArray(o.flags)
+        ? o.flags.map(String).slice(0, 20)
+        : [],
+    });
+  }
+  return docs;
+}
+
+export function buildProviderKeys(): {
+  keys: {
+    gemini: string[] | undefined;
+    groq: string[] | undefined;
+    openrouter: string[] | undefined;
+    mistral: string[] | undefined;
+  };
+  modelOverrides: Partial<Record<string, string>>;
+} {
+  return {
+    keys: {
+      gemini: readKeys("GEMINI_API_KEY"),
+      groq: readSingleKey("GROQ_API_KEY"),
+      openrouter: readSingleKey("OPENROUTER_API_KEY"),
+      mistral: readSingleKey("MISTRAL_API_KEY"),
+    },
+    modelOverrides: {
+      gemini: readModel("GEMINI"),
+      groq: readModel("GROQ"),
+      openrouter: readModel("OPENROUTER"),
+      mistral: readModel("MISTRAL"),
+    },
+  };
+}
