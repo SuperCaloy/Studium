@@ -244,50 +244,50 @@ function sanitizeParts(parts: ShardParts): ShardParts {
 
   const topics = Array.isArray(parts.topics)
     ? (parts.topics as unknown[])
-        .filter((t): t is Record<string, unknown> =>
-          Boolean(t) && typeof t === "object" && !Array.isArray(t)
-        )
-        .map((t) => {
-          const title = asString(t.title);
-          const summary = asString(t.summary);
-          const id = typeof t.id === "string" && t.id ? t.id : undefined;
-          const details = Array.isArray(t.details)
-            ? (t.details as unknown[])
-                .filter((d): d is Record<string, unknown> =>
-                  Boolean(d) && typeof d === "object" && !Array.isArray(d)
-                )
-                .map((d) => {
-                  const heading = asString(d.heading);
-                  const points = asStringArray(d.points);
-                  const did = typeof d.id === "string" && d.id ? d.id : undefined;
-                  if (!heading || points.length === 0) return null;
-                  return { id: did, heading, points } as TopicDetail;
-                })
-                .filter((d): d is TopicDetail => d !== null)
-            : [];
-          if (!title) return null;
-          return { id, title, summary, details } as TopicAccordion;
-        })
-        .filter((t): t is TopicAccordion => t !== null)
+      .filter((t): t is Record<string, unknown> =>
+        Boolean(t) && typeof t === "object" && !Array.isArray(t)
+      )
+      .map((t) => {
+        const title = asString(t.title);
+        const summary = asString(t.summary);
+        const id = typeof t.id === "string" && t.id ? t.id : undefined;
+        const details = Array.isArray(t.details)
+          ? (t.details as unknown[])
+            .filter((d): d is Record<string, unknown> =>
+              Boolean(d) && typeof d === "object" && !Array.isArray(d)
+            )
+            .map((d) => {
+              const heading = asString(d.heading);
+              const points = asStringArray(d.points);
+              const did = typeof d.id === "string" && d.id ? d.id : undefined;
+              if (!heading || points.length === 0) return null;
+              return { id: did, heading, points } as TopicDetail;
+            })
+            .filter((d): d is TopicDetail => d !== null)
+          : [];
+        if (!title) return null;
+        return { id, title, summary, details } as TopicAccordion;
+      })
+      .filter((t): t is TopicAccordion => t !== null)
     : [];
 
   const terms = Array.isArray(parts.terms)
     ? (parts.terms as unknown[])
-        .filter((t): t is Record<string, unknown> =>
-          Boolean(t) && typeof t === "object" && !Array.isArray(t)
-        )
-        .map((t) => {
-          const term = asString(t.term);
-          const definition = asString(t.definition);
-          if (!term || !definition) return null;
-          return {
-            id: typeof t.id === "string" && t.id ? t.id : undefined,
-            term,
-            definition,
-            sourceDoc: asString(t.sourceDoc) || undefined,
-          } as TermDefinition;
-        })
-        .filter((t): t is TermDefinition => t !== null)
+      .filter((t): t is Record<string, unknown> =>
+        Boolean(t) && typeof t === "object" && !Array.isArray(t)
+      )
+      .map((t) => {
+        const term = asString(t.term);
+        const definition = asString(t.definition);
+        if (!term || !definition) return null;
+        return {
+          id: typeof t.id === "string" && t.id ? t.id : undefined,
+          term,
+          definition,
+          sourceDoc: asString(t.sourceDoc) || undefined,
+        } as TermDefinition;
+      })
+      .filter((t): t is TermDefinition => t !== null)
     : [];
 
   if (topics.length > 0) sanitized.topics = topics;
@@ -318,13 +318,8 @@ function assembleReviewer(
     createdAt: Date.now(),
     updatedAt: Date.now(),
     summary: {
-<<<<<<< HEAD
-      title: parts.title || draft?.title || "Study Material",
-      overview: parts.overview || draft?.overview || "",
-=======
       title: clean.title || draft?.title || "Study Reviewer",
       overview: clean.overview || draft?.overview || "",
->>>>>>> 4e031eed0f25a715e38ce0f1275a77a4fcdb4f9b
       keyTakeaways:
         clean.keyTakeaways && clean.keyTakeaways.length > 0
           ? clean.keyTakeaways
@@ -382,9 +377,9 @@ async function runTask<T>(
 ): Promise<TaskResult<T> | null> {
   const order: ProviderConfig[] = preference
     ? [
-        ...PROVIDERS.filter((p) => p.id === preference.providerId),
-        ...PROVIDERS.filter((p) => p.id !== preference.providerId),
-      ]
+      ...PROVIDERS.filter((p) => p.id === preference.providerId),
+      ...PROVIDERS.filter((p) => p.id !== preference.providerId),
+    ]
     : PROVIDERS;
   for (const provider of order) {
     const apiKeys = keys[provider.id];
@@ -415,8 +410,7 @@ async function runTask<T>(
           return { value, provider: provider.name, model };
         } catch (err) {
           failures.push(
-            `${taskLabel}:${provider.name}[key ${ki}] ${model} (${
-              err instanceof Error ? err.message : "unknown error"
+            `${taskLabel}:${provider.name}[key ${ki}] ${model} (${err instanceof Error ? err.message : "unknown error"
             })`
           );
         }
@@ -470,24 +464,24 @@ async function callProvider(
 ): Promise<string> {
   return provider.kind === "gemini"
     ? callGemini(
-        apiKey,
-        model,
-        systemPrompt,
-        userContent,
-        jsonSchema,
-        provider.maxOutputTokens,
-        provider.timeoutMs
-      )
+      apiKey,
+      model,
+      systemPrompt,
+      userContent,
+      jsonSchema,
+      provider.maxOutputTokens,
+      provider.timeoutMs
+    )
     : callOpenAICompat(
-        apiKey,
-        provider.baseUrl!,
-        model,
-        systemPrompt,
-        userContent,
-        jsonSchema,
-        provider.maxOutputTokens,
-        provider.timeoutMs
-      );
+      apiKey,
+      provider.baseUrl!,
+      model,
+      systemPrompt,
+      userContent,
+      jsonSchema,
+      provider.maxOutputTokens,
+      provider.timeoutMs
+    );
 }
 
 async function callGemini(

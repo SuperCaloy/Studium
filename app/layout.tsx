@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./print.css";
 import Providers from "./Providers";
-
+import { Analytics } from "@vercel/analytics/react";
 const geistSans = Geist({
   subsets: ["latin"],
   variable: "--font-geist-sans",
@@ -40,6 +40,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );
