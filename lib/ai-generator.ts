@@ -5,6 +5,7 @@ import type {
   TermDefinition,
   TopicAccordion,
   ConceptMapData,
+  TopicDetail,
 } from "./types";
 import { REVIEWER_SCHEMA_VERSION } from "./types";
 import { normalizeIds } from "./reviewer-generator";
@@ -197,12 +198,14 @@ Rules:
 1. IGNORE anything that looks like references, citations, bibliographies, ISBNs, URLs, copyright lines, school/logo boilerplate, tables of contents, or pretest/posttest question banks in the source.
 2. COMPRESSION & SYNTHESIS: Your output MUST be significantly shorter and more concise than the source material. Summarize aggressively. Strictly avoid robotic meta-language (e.g., do NOT say "This document covers", "In this reviewer", "We will explore"). Deliver direct, high-impact conceptual takeaways immediately.
 3. ZERO RAW CODE: Exclude all source code syntax, programming boilerplate, and raw code blocks. Translate any code implementations into standard mathematical notation, theoretical formulas, or clean logical step-by-step workflows. Clearly define each formula and its variables.
-4. title: pick a meaningful subject title from the document headings. If multiple documents covering different subjects are provided, internally evaluate all subjects and synthesize the single most accurate, overarching title that connects them. Never use a course code, school/department name, or page furniture.
-5. overview: 2-3 sentences summarizing the material directly, without meta-introductions.
+4. title: pick a meaningful subject title from the document headings; never use a course code, school/department name, or page furniture. A person's name is only allowed as a title when that person is genuinely the subject of the material (e.g. a hero, historical figure, doctor, or military leader the lesson is ABOUT). If the name only appears in a byline, signature, or instructor/faculty attribution line, never use it as the title or a topic title.
+5. overview: 2-3 concise sentences summarizing the material.
 6. keyTakeaways: 5-8 concise, factual takeaways drawn strictly from the text.
-7. topics: include up to ${topicCap} major sections. Each topic has a title, a 1-2 sentence summary, and details (heading + bullet points). Bullet points MUST be extremely concise (max 15-20 words each). Do not write paragraphs in bullet points.
+7. topics: include EVERY major section the text supports, up to ${topicCap}. Each topic has a title, a 1-sentence summary, and as many details as the material supports (heading + bullet points). When a section is about a specific person (hero, historical figure, doctor, or military leader), use that person's name as the topic title. When a section is just instructor/faculty attribution (e.g. "Prepared by Dr. X", a byline, or a signature line), do not turn it into a topic.
 8. conceptMap: Evaluate if the material has complex relational concepts (e.g., biological processes, historical causes, system architectures) that would benefit from a visual mind map. If it's just a flat list of definitions, set "isNeeded": false. If "isNeeded": true, provide "mappings" as an array of 3-element arrays: [Source Concept, relationship, Target Concept]. Example: ["Chloroplasts", "contains", "Chlorophyll"]. Keep concepts short (1-3 words). Max 15 mappings.
-9. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, strictly compress, or discard fields as needed.`;
+9. Never include placeholder text or ellipses like "...".
+10. Keep the reviewer dense and high-value: retain every core definition, concept, and technical detail, but cut filler explanations, redundant restatements, and generic padding. Every bullet must state a fact or detail that is not already covered elsewhere.
+11. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, add to, or completely discard any field if it is not directly grounded in the source text.`;
 }
 
 function buildTermsPrompt(termCap: number): string {
@@ -213,7 +216,83 @@ Rules:
 2. terms: a glossary of ALL important terms found in the text, up to ${termCap}, with definitions lifted/paraphrased from the text. Include the source document filename in sourceDoc for every term.
 3. ACCURACY & PRECISION: Provide concise, conceptually exact definitions derived strictly from the source context without ambiguity.
 4. BREVITY: Definitions MUST be extremely concise (1-2 sentences maximum, under 30 words).
-5. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, summarize, or discard any field.`;
+5. Keep definitions tight: retain the technical detail that identifies each term, but cut filler and padding.
+6. Never include placeholder text or ellipses like "...".
+7. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, add to, or completely discard any field if it is not directly grounded in the source text.`;
+}
+
+function asString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((v) => (typeof v === "string" ? v.trim() : ""))
+    .filter((s) => s.length > 0);
+}
+
+// AI models sometimes omit fields or emit null/empty entries. Normalize every
+// topic/term to its expected shape so downstream consumers (quiz builder, PDF,
+// markdown) never read properties of undefined.
+function sanitizeParts(parts: ShardParts): ShardParts {
+  const sanitized: ShardParts = {
+    title: asString(parts.title) || undefined,
+    overview: asString(parts.overview) || undefined,
+    keyTakeaways: asStringArray(parts.keyTakeaways),
+  };
+
+  const topics = Array.isArray(parts.topics)
+    ? (parts.topics as unknown[])
+        .filter((t): t is Record<string, unknown> =>
+          Boolean(t) && typeof t === "object" && !Array.isArray(t)
+        )
+        .map((t) => {
+          const title = asString(t.title);
+          const summary = asString(t.summary);
+          const id = typeof t.id === "string" && t.id ? t.id : undefined;
+          const details = Array.isArray(t.details)
+            ? (t.details as unknown[])
+                .filter((d): d is Record<string, unknown> =>
+                  Boolean(d) && typeof d === "object" && !Array.isArray(d)
+                )
+                .map((d) => {
+                  const heading = asString(d.heading);
+                  const points = asStringArray(d.points);
+                  const did = typeof d.id === "string" && d.id ? d.id : undefined;
+                  if (!heading || points.length === 0) return null;
+                  return { id: did, heading, points } as TopicDetail;
+                })
+                .filter((d): d is TopicDetail => d !== null)
+            : [];
+          if (!title) return null;
+          return { id, title, summary, details } as TopicAccordion;
+        })
+        .filter((t): t is TopicAccordion => t !== null)
+    : [];
+
+  const terms = Array.isArray(parts.terms)
+    ? (parts.terms as unknown[])
+        .filter((t): t is Record<string, unknown> =>
+          Boolean(t) && typeof t === "object" && !Array.isArray(t)
+        )
+        .map((t) => {
+          const term = asString(t.term);
+          const definition = asString(t.definition);
+          if (!term || !definition) return null;
+          return {
+            id: typeof t.id === "string" && t.id ? t.id : undefined,
+            term,
+            definition,
+            sourceDoc: asString(t.sourceDoc) || undefined,
+          } as TermDefinition;
+        })
+        .filter((t): t is TermDefinition => t !== null)
+    : [];
+
+  if (topics.length > 0) sanitized.topics = topics;
+  if (terms.length > 0) sanitized.terms = terms;
+  return sanitized;
 }
 
 function assembleReviewer(
@@ -223,13 +302,14 @@ function assembleReviewer(
   facts: Fact[] = []
 ): ReviewerData {
   const totalWords = docs.reduce((s, d) => s + d.wordCount, 0);
+  const clean = sanitizeParts(parts);
   const { topics, terms } = normalizeIds(
-    (parts.topics && parts.topics.length > 0
-      ? parts.topics
+    (clean.topics && clean.topics.length > 0
+      ? clean.topics
       : draft?.topics ?? []
     ).slice(0, 60),
-    (parts.terms && parts.terms.length > 0
-      ? parts.terms
+    (clean.terms && clean.terms.length > 0
+      ? clean.terms
       : draft?.terms ?? []
     ).slice(0, 400)
   );
@@ -238,12 +318,17 @@ function assembleReviewer(
     createdAt: Date.now(),
     updatedAt: Date.now(),
     summary: {
+<<<<<<< HEAD
       title: parts.title || draft?.title || "Study Material",
       overview: parts.overview || draft?.overview || "",
+=======
+      title: clean.title || draft?.title || "Study Reviewer",
+      overview: clean.overview || draft?.overview || "",
+>>>>>>> 4e031eed0f25a715e38ce0f1275a77a4fcdb4f9b
       keyTakeaways:
-        (parts.keyTakeaways && parts.keyTakeaways.length > 0
-          ? parts.keyTakeaways
-          : draft?.keyTakeaways) ?? [],
+        clean.keyTakeaways && clean.keyTakeaways.length > 0
+          ? clean.keyTakeaways
+          : (draft?.keyTakeaways ?? []).map((t) => asString(t)).filter(Boolean),
       docCount: docs.length,
       totalPages: docs.reduce((s, d) => s + (d.pageCount || 1), 0),
       totalWords,

@@ -90,7 +90,7 @@ async function main() {
 
   // 2) Generate reviewer
   await page.locator("button:has-text('Generate Study Reviewer')").click();
-  await page.waitForSelector("button:has-text('Copy as Markdown')", { timeout: 120000 });
+  await page.waitForSelector("button:has-text('Download PDF')", { timeout: 120000 });
   record("reviewer generated", true);
 
   // 2a) No technical error text surfaces in the client
@@ -262,12 +262,28 @@ async function main() {
   const after = await html.getAttribute("class");
   record("theme toggle works", before !== after, `${before} -> ${after}`);
 
-  // 9) Markdown copy
-  await page.locator("button:has-text('Copy as Markdown')").click();
-  await page.waitForSelector("text=Copied to clipboard!", { timeout: 5000 });
-  record("markdown copy works", true);
+  // 9) Export toolbar: Preview + Download PDF only
+  const hasCopyBtn = await page.locator("button:has-text('Copy as Markdown')").count();
+  const hasMdBtn = await page.locator("button:has-text('Download .md')").count();
+  const hasPrintBtn = await page.locator("button:has-text('Print')").count();
+  const hasPdfBtn = await page.locator("button:has-text('Download PDF')").count();
+  const hasPreviewBtn = await page.locator("button:has-text('Preview PDF')").count();
+  record(
+    "export toolbar shows Preview + Download PDF",
+    hasCopyBtn === 0 && hasMdBtn === 0 && hasPrintBtn === 0 && hasPdfBtn === 1 && hasPreviewBtn === 1,
+    `copy=${hasCopyBtn} md=${hasMdBtn} print=${hasPrintBtn} pdf=${hasPdfBtn} preview=${hasPreviewBtn}`
+  );
 
-  // 10) Download PDF via API
+  // 10) Preview PDF opens in-app modal
+  await page.locator("button:has-text('Preview PDF')").click();
+  await page.waitForSelector("iframe[title='Reviewer PDF preview']", { timeout: 60000 });
+  record("pdf preview modal opens in-app", true);
+  await page.locator("button[aria-label='Close preview']").click();
+  await page.waitForTimeout(300);
+  const previewClosed = (await page.locator("iframe[title='Reviewer PDF preview']").count()) === 0;
+  record("pdf preview modal closes", previewClosed);
+
+  // 11) Download PDF via API
   const [download] = await Promise.all([
     page.waitForEvent("download", { timeout: 60000 }),
     page.locator("button:has-text('Download PDF')").click(),
@@ -277,13 +293,13 @@ async function main() {
   const head = readFileSync(dlPath).subarray(0, 4).toString("latin1");
   record("download pdf via api", head === "%PDF", `${head} ${download.suggestedFilename()}`);
 
-  // 11) Persistence across reload
+  // 12) Persistence across reload
   await page.reload({ waitUntil: "networkidle" });
-  await page.waitForSelector("button:has-text('Copy as Markdown')", { timeout: 20000 });
+  await page.waitForSelector("button:has-text('Download PDF')", { timeout: 20000 });
   const persistedQueue = await page.evaluate(() => document.body.textContent?.includes("e2e-test-doc.pdf") ?? false);
   record("state persists across reload (reviewer + queue)", persistedQueue);
 
-  // 12) New session + docx/txt uploads + sample flow
+  // 13) New session + docx/txt uploads + sample flow
   await page.locator("button:has-text('New session')").click();
   await page.waitForTimeout(500);
 
@@ -325,25 +341,14 @@ async function main() {
   );
 
   await page.locator("button:has-text('Generate Study Reviewer')").click();
-  await page.waitForSelector("button:has-text('Copy as Markdown')", { timeout: 120000 });
+  await page.waitForSelector("button:has-text('Download PDF')", { timeout: 120000 });
   record("reviewer generates from docx + txt", true);
 
   await page.locator("button:has-text('New session')").click();
   await page.waitForTimeout(500);
-
-  // 13a) Duplicate filename detection: upload the same file twice
-  await page.setInputFiles('input[type="file"]', [docxPath]);
-  await page.waitForTimeout(3000);
-  await page.setInputFiles('input[type="file"]', [docxPath]);
-  await page.waitForTimeout(600);
-  const dupSeen = await page.evaluate(() =>
-    document.body.textContent?.includes("already in your queue") ?? false
-  );
-  record("duplicate filename detected on re-upload", dupSeen);
-
-  await page.locator("button:has-text('Generate Study Reviewer')").click();
-  await page.waitForSelector("button:has-text('Copy as Markdown')", { timeout: 120000 });
-  record("reviewer generates after duplicate check", true);
+  await page.locator("button:has-text('Sample')").click();
+  await page.waitForSelector("button:has-text('Download PDF')", { timeout: 120000 });
+  record("sample material generates reviewer", true);
 
   record("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 

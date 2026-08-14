@@ -1,7 +1,14 @@
 import type { ReviewerData } from "@/lib/types";
 
+function formatTitle(title: string): string {
+  const t = title.trim();
+  if (!t) return "Study Reviewer";
+  return /reviewer$/i.test(t) ? t : `${t} Reviewer`;
+}
+
 export default function PrintPanel({ reviewer }: { reviewer: ReviewerData }) {
   const s = reviewer.summary;
+  const title = formatTitle(s.title);
   const sections: { title: string; el: React.ReactNode }[] = [];
 
   sections.push({
@@ -98,21 +105,13 @@ export default function PrintPanel({ reviewer }: { reviewer: ReviewerData }) {
     });
   }
 
-  const date = new Date(reviewer.updatedAt).toLocaleDateString(undefined, {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-
   return (
     <div className="sr-panel">
       <header className="sr-doc-head">
         <span className="sr-doc-title-src" aria-hidden="true">
-          {s.title}
+          {title}
         </span>
-        <h1 className="sr-doc-title">
-          {s.title}
-        </h1>
+        <h1 className="sr-doc-heading">{title}</h1>
         <span className="rule" />
       </header>
 
