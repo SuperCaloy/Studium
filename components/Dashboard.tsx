@@ -37,7 +37,7 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
     <div className="space-y-6">
       <ExportBar reviewer={reviewer} />
 
-      <div className="flex gap-1.5 overflow-x-auto pb-1">
+      <div className="flex gap-1.5 overflow-x-auto hide-scrollbar pb-1">
         {TABS.filter(t => t.show ? t.show(reviewer) : true).map((t) => {
           const Icon = t.icon;
           const badge = t.badge ? t.badge(reviewer) : 0;
@@ -82,6 +82,7 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
             bank={reviewer.quizBank}
             questionTarget={questionTarget}
             onTargetChange={onTargetChange}
+            context={`${reviewer.summary.title}\n${reviewer.summary.overview}\n${reviewer.summary.keyTakeaways.join('\n')}`}
           />
         )}
       </div>

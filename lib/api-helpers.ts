@@ -1,8 +1,8 @@
 import type { NextRequest } from "next/server";
 import type { ExtractedDocument, FileFormat } from "./types";
 
-export const MAX_DOCS = 20;
-export const MAX_TEXT_CHARS = 60000;
+export const MAX_DOCS = 5;
+export const MAX_TEXT_CHARS = 50000;
 export const MAX_BODY_BYTES = 8 * 1024 * 1024;
 export const MAX_TARGET = 70;
 export const MIN_TARGET = 1;
@@ -46,6 +46,8 @@ export async function rateLimited(key: string): Promise<boolean> {
     for (const [k, v] of RATE_TRACKER.entries()) {
       if (v.resetAt <= now) RATE_TRACKER.delete(k);
     }
+    // Hard cap to prevent memory blowout from IP spoofing
+    if (RATE_TRACKER.size > 1000) RATE_TRACKER.clear();
   }
 
   const entry = RATE_TRACKER.get(key);
@@ -80,10 +82,17 @@ export function readModel(base: string): string | undefined {
 }
 
 export function clientIp(req: NextRequest): string {
-  const fwd = req.headers.get("x-forwarded-for");
-  if (fwd) return fwd.split(",")[0].trim();
+  // Vercel/Next.js edge directly provides req.ip
+  const reqIp = (req as any).ip;
+  if (reqIp) return reqIp;
+
+  // Vercel's trusted proxy header for the actual client
   const real = req.headers.get("x-real-ip");
-  return real?.trim() || "unknown";
+  if (real) return real.trim();
+
+  // We explicitly ignore x-forwarded-for here as it is easily spoofable
+  // without a trusted proxy topology parser. Vercel guarantees x-real-ip.
+  return "unknown";
 }
 
 export function originAllowed(req: NextRequest): boolean {

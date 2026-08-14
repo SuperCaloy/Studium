@@ -199,21 +199,21 @@ export default function Home() {
     setProgress({
       step: "parsing",
       percent: 12,
-      message: "Parsing documents…",
+      message: "Reading your study materials…",
     });
     await sleep(200);
 
     setProgress({
       step: "compiling",
       percent: 30,
-      message: `Compiling text from ${docs.length} document${docs.length === 1 ? "" : "s"}…`,
+      message: `Organizing notes from ${docs.length} document${docs.length === 1 ? "" : "s"}…`,
     });
     await sleep(300);
 
     setProgress({
       step: "extracting",
       percent: 55,
-      message: "Analyzing key concepts, topics, and terms…",
+      message: "Finding the most important topics and terms…",
     });
 
     let result: ReviewerData | null = null;
@@ -249,11 +249,11 @@ export default function Home() {
     setProgress({
       step: "building",
       percent: 85,
-      message: `Building quiz bank (${result.quizBank.length} questions)…`,
+      message: `Creating your practice quizzes (${result.quizBank.length} questions)…`,
     });
     await sleep(250);
 
-    setProgress({ step: "done", percent: 100, message: "Reviewer ready!" });
+    setProgress({ step: "done", percent: 100, message: "Your study guide is ready!" });
     await sleep(400);
     if (token !== generationToken.current) return;
     setProgress(null);
@@ -342,6 +342,12 @@ export default function Home() {
                         </button>
                       )}
                     </div>
+                  </div>
+                )}
+
+                {generating && progress && (
+                  <div className="pt-2">
+                    <ProgressSteps progress={progress} />
                   </div>
                 )}
               </div>

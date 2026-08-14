@@ -14,11 +14,11 @@ const STEPS: {
   label: string;
   icon: typeof FileSearch;
 }[] = [
-  { key: "parsing", label: "Parsing documents", icon: FileSearch },
-  { key: "compiling", label: "Compiling text", icon: Layers },
-  { key: "extracting", label: "Extracting concepts", icon: Lightbulb },
-  { key: "building", label: "Building quiz bank", icon: ListChecks },
-  { key: "done", label: "Done", icon: CheckCircle2 },
+  { key: "parsing", label: "Reading files", icon: FileSearch },
+  { key: "compiling", label: "Organizing notes", icon: Layers },
+  { key: "extracting", label: "Finding topics", icon: Lightbulb },
+  { key: "building", label: "Creating quizzes", icon: ListChecks },
+  { key: "done", label: "Ready", icon: CheckCircle2 },
 ];
 
 export default function ProgressSteps({ progress }: { progress: GenerationProgress }) {

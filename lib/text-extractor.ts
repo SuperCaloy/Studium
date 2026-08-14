@@ -62,8 +62,10 @@ async function extractPdf(file: File): Promise<{
 }> {
   const pdfjsLib = await getPdfjs();
   const arrayBuffer = await file.arrayBuffer();
+  // Ensure arrayBuffer is safely copied to Uint8Array for PDF.js across mobile browsers
+  const uint8Array = new Uint8Array(arrayBuffer);
   const pdf = await pdfjsLib.getDocument({
-    data: new Uint8Array(arrayBuffer),
+    data: uint8Array,
     cMapUrl: "/pdfjs/cmaps/",
     cMapPacked: true,
     standardFontDataUrl: "/pdfjs/standard_fonts/",
@@ -165,7 +167,7 @@ async function extractTxt(file: File): Promise<{
 export async function extractText(file: File): Promise<ExtractedDocument> {
   const format = getFormat(file.name);
   if (!format) {
-    throw new Error("Unsupported file format");
+    throw new Error(`Unsupported file format: ${file.name}`);
   }
 
   const base = {
