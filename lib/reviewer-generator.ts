@@ -500,7 +500,7 @@ function snippetAround(text: string, index: number, before = 80, after = 160): s
   const end = Math.min(text.length, index + after);
   let snip = text.slice(start, end).replace(/\s+/g, " ").trim();
   if (start > 0) snip = "…" + snip;
-  return snip.slice(0, 240);
+  return snip.slice(0, 200);
 }
 
 function extractTerms(
@@ -523,7 +523,7 @@ function extractTerms(
     terms.push({
       id: `term-${seq++}`,
       term,
-      definition: tightenDefinition(term, definition).slice(0, 240),
+      definition: tightenDefinition(term, definition).slice(0, 200),
       sourceDoc,
     });
   };
@@ -734,7 +734,7 @@ function buildTopic(
     })
     .sort((a, b) => b.score - a.score)
     .slice(0, 8)
-    .map((x) => x.s.slice(0, 220))
+    .map((x) => x.s.slice(0, 180))
     .sort(
       (a, b) =>
         section.body.indexOf(a) - section.body.indexOf(b) ||
@@ -748,7 +748,7 @@ function buildTopic(
     details.push({
       id: `det-${st.id}`,
       heading: st.term,
-      points: [st.definition.slice(0, 240)],
+      points: [st.definition.slice(0, 200)],
     });
   }
   if (points.length > 0) {
@@ -762,14 +762,14 @@ function buildTopic(
     details.push({
       id: `det-${section.title}-overview`,
       heading: "Overview",
-      points: nonQ.slice(0, 2).map((s) => s.slice(0, 200)),
+      points: nonQ.slice(0, 2).map((s) => s.slice(0, 180)),
     });
   }
 
   return {
     id: `topic-${section.title}`,
     title: section.title,
-    summary: points[0] ?? sentences[0]?.slice(0, 200) ?? section.body.slice(0, 200),
+    summary: points[0] ?? sentences[0]?.slice(0, 160) ?? section.body.slice(0, 160),
     details: uniqueBy(details, (d) => d.heading).slice(0, 8),
   };
 }
@@ -781,7 +781,7 @@ function buildFallbackTopic(terms: TermDefinition[]): TopicAccordion {
       ? top.map((t) => ({
           id: `det-fb-${t.id}`,
           heading: t.term,
-          points: [t.definition.slice(0, 240)],
+          points: [t.definition.slice(0, 200)],
         }))
       : [{ id: "det-fb-overview", heading: "Overview", points: [] }];
   return {
@@ -871,6 +871,7 @@ function negateStatement(s: string): string | null {
 }
 
 function cleanStatement(s: string, minLen: number): string | null {
+  if (typeof s !== "string") return null;
   if (/\n|\r/.test(s)) return null;
   let x = s
     .replace(/^\s*[•●◦▪]\s*/, "")
@@ -941,11 +942,14 @@ export function buildQuiz(
   const minLen = isShort ? 30 : 40;
 
   const cleanTerms = terms.filter(
-    (t) => t.definition.length > (isShort ? 25 : 30) && !JUNK_TERMS.has(t.term.toLowerCase())
+    (t) =>
+      typeof t.definition === "string" &&
+      t.definition.length > (isShort ? 25 : 30) &&
+      !JUNK_TERMS.has(t.term.toLowerCase())
   );
   const topicPoints = topics
-    .flatMap((t) => [t.summary, ...t.details.flatMap((d) => d.points)])
-    .filter((s) => s && s.length > minLen && !isQuestionLike(s));
+    .flatMap((t) => [t.summary, ...(t.details ?? []).flatMap((d) => d.points ?? [])])
+    .filter((s): s is string => typeof s === "string" && s.length > minLen && !isQuestionLike(s));
 
   const tfTarget = Math.min(20, Math.round(questionTarget * 0.3));
   const mcTarget = Math.max(0, questionTarget - tfTarget);
@@ -1105,8 +1109,9 @@ export function buildQuiz(
   const byTopic: string[][] = topics.map((t) =>
     unique([
       t.summary,
-      ...t.details.flatMap((d) => d.points),
+      ...(t.details ?? []).flatMap((d) => d.points ?? []),
     ])
+      .filter((p): p is string => typeof p === "string")
       .map((p) => cleanStatement(p, minLen + 10))
       .filter((p): p is string => !!p)
   );
@@ -1410,7 +1415,7 @@ export function prepareDraft(docs: ExtractedDocument[]): {
       title,
       overview: pickOverview(sentences, freq) || text.slice(0, 400),
       keyTakeaways: uniqueBy(
-        takeawayCandidates.slice(0, 6).map((s) => s.slice(0, 220)),
+        takeawayCandidates.slice(0, 6).map((s) => s.slice(0, 180)),
         (s) => s
       ),
       topics,
@@ -1463,9 +1468,9 @@ export function buildQuizFromReviewer(
   const pool = sourceText ? [sourceText] : [];
   const text = pool.join("\n\n");
   const withTakeaways = [...terms, ...keyTakeaways.map((t) => ({
-    id: `tk-${t.slice(0, 8)}`,
+    id: `tk-${(typeof t === "string" ? t : "").slice(0, 8)}`,
     term: "",
-    definition: t,
+    definition: typeof t === "string" ? t : "",
   } as TermDefinition))];
   return buildQuiz(withTakeaways, topics, text, questionTarget);
 }

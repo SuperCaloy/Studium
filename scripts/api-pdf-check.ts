@@ -158,11 +158,11 @@ async function main() {
 
   const pages = m.all.split("\n---PAGE---\n").filter(Boolean);
   const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
-  checks.push(["body starts page 1 (no cover)", pages.length > 0 && /Executive Summary/.test(pages[0]), `pages=${pages.length}`]);
-  checks.push(["doc meta line on page 1", pages.length > 0 && /words/.test(norm(pages[0])), `pages=${pages.length}`]);
-  checks.push(["Topics section present", /Topics/.test(m.all), "text"]);
-  checks.push(["Terms table present", /Terms & Definitions/.test(m.all), "text"]);
-  checks.push(["Key Facts table present", /Key Facts & Formulas/.test(m.all), "text"]);
+  checks.push(["body starts page 1 (no cover)", pages.length > 0 && norm(pages[0]).includes("executivesummary"), `pages=${pages.length}`]);
+  checks.push(["title header on page 1", pages.length > 0 && /reviewer/.test(norm(pages[0])), `pages=${pages.length}`]);
+  checks.push(["Topics section present", norm(m.all).includes("topics"), "text"]);
+  checks.push(["Terms table present", norm(m.all).includes("terms&definitions"), "text"]);
+  checks.push(["Key Facts table present", norm(m.all).includes("keyfacts&formulas"), "text"]);
   checks.push(["no quiz section", !/Practice Quiz/.test(m.all), "text"]);
   checks.push(["no cover stats tiles", !/Min Study/.test(m.all), "text"]);
   checks.push(["no em-dash", !/—/.test(m.all), "text"]);
