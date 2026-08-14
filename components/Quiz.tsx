@@ -79,7 +79,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
 
   if (bank.length === 0) {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
         <CircleDot size={28} className="mx-auto mb-3 text-zinc-300" />
         <p className="text-sm text-zinc-500">
           No quiz questions were generated from the source material.
@@ -90,9 +90,9 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
 
   if (status === "setup") {
     return (
-      <div className="mx-auto max-w-md rounded-2xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="mx-auto max-w-md rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
         <Trophy size={32} className="mx-auto mb-3 text-amber-500" />
-        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+        <h3 className="font-display text-xl font-semibold text-zinc-900 dark:text-zinc-50">
           Practice Quiz
         </h3>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -150,7 +150,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
     );
     return (
       <div className="space-y-5">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
           <Trophy size={36} className="mx-auto mb-3 text-amber-500" />
           <p className="text-4xl font-bold text-zinc-900 dark:text-zinc-50">
             {correct} / {total}
@@ -181,7 +181,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
             {missed.map((q) => (
               <div
                 key={q.id}
-                className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900"
+                className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900"
               >
                 <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                   {q.question}
@@ -204,7 +204,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-16 z-10 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="sticky top-16 z-10 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="font-semibold text-zinc-700 dark:text-zinc-300">
             Question {index + 1} of {total}
@@ -222,7 +222,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
       </div>
 
       {current && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
           <div className="mb-4 flex items-start justify-between gap-3">
             <p className="text-base font-semibold leading-relaxed text-zinc-900 dark:text-zinc-50">
               {current.question}

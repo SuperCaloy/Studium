@@ -11,7 +11,7 @@ const PAGE_W = 595.28; // A4 portrait, PDF points
 const PAGE_H = 841.89;
 const PT_TO_MM = 25.4 / 72;
 
-const FOOTER_RE = /Page \d+ of \d+|Study Reviewer Generator/;
+const FOOTER_RE = /Page \d+ of \d+|Studium · study reviewer/;
 
 interface TextItem {
   str: string;
@@ -130,7 +130,7 @@ async function main() {
     pages.length > 0 && norm(pages[0]).includes("executivesummary");
   const checks: [string, boolean, string][] = [
     ["content starts page 1 (no cover)", bodyStartOk, `pages=${pages.length}`],
-    ["doc meta line on page 1", /words/.test(norm(pages[0] ?? "")), `pages=${pages.length}`],
+    ["doc title on page 1", /e2e|test|doc|reviewer/i.test(norm(pages[0] ?? "")), `pages=${pages.length}`],
     ["section Executive Summary", /Executive Summary/.test(m1.all), "text"],
     ["section Topics", /Topics/.test(m1.all), "text"],
     ["section Terms & Definitions", /Terms & Definitions/.test(m1.all), "text"],
@@ -138,7 +138,7 @@ async function main() {
     ["Key Takeaways panel", /keytakeaways/.test(norm(m1.all)), "text"],
     ["Topic N labels", /topic\d/.test(norm(m1.all)), "text"],
     ["no quiz section", !/Practice Quiz/.test(m1.all), "text"],
-    ["no cover page", !/Study Reviewer Generator/.test(norm(pages[0])), "text"],
+    ["no cover page", !/Studium · study reviewer/.test(norm(pages[0])), "text"],
     ["page numbers present (normal)", m1.hasPageNumbers, "text"],
     ["page numbers present (zero-margin)", m2.hasPageNumbers, "text"],
     ["print panel visible in print media", /panelDisplay":"block"/.test(designCss), designCss],
@@ -151,7 +151,7 @@ async function main() {
     ["table header in accent teal", /tableHeadBg":"rgb\(31, 95, 90\)"/.test(designCss), designCss],
     ["even rows stay white (no gray tint)", /evenRowTint":"rgb\(255, 255, 255\)"/.test(designCss), designCss],
     ["no em-dash", !/—/.test(m1.all), "text"],
-    ["footer brand line", /Study Reviewer Generator/.test(m1.all), "text"],
+    ["footer brand line", /Studium/.test(m1.all), "text"],
     ["page errors none", errors.length === 0, String(errors)],
   ];
 

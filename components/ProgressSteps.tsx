@@ -25,7 +25,7 @@ export default function ProgressSteps({ progress }: { progress: GenerationProgre
   const activeIndex = STEPS.findIndex((s) => s.key === progress.step);
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
+    <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
       <div className="mb-5">
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="font-medium text-zinc-700 dark:text-zinc-300">

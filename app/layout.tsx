@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Newsreader } from "next/font/google";
 import "./globals.css";
 import "./print.css";
 import Providers from "./Providers";
@@ -16,10 +16,18 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+const newsreader = Newsreader({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+  style: ["normal", "italic"],
+  weight: ["400", "500", "600"],
+});
+
 export const metadata: Metadata = {
-  title: "Study Reviewer Generator",
+  title: "Studium | Study reviewer generator",
   description:
-    "Turn your PDF, DOCX, and TXT study materials into structured reviewers with summaries, topics, terms, flashcards, and randomized quizzes.",
+    "Turn your PDF, DOCX, and TXT study notes into a structured reviewer with summaries, topics, terms, flashcards, and a randomized quiz. Your files never leave your device.",
 };
 
 export const viewport: Viewport = {
@@ -35,7 +43,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${newsreader.variable}`}>
       <body>
         <Providers>{children}</Providers>
       </body>

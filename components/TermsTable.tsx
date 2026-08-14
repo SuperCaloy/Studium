@@ -41,7 +41,7 @@ export default function TermsTable({ terms }: { terms: TermDefinition[] }) {
         />
       </div>
 
-      <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700">
+      <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
         <ul className="divide-y divide-zinc-100 bg-white md:hidden dark:divide-zinc-800 dark:bg-zinc-900">
           {filtered.map((t) => (
             <li key={t.id} className="px-4 py-3">

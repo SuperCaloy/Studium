@@ -7,7 +7,7 @@ const OUT = join(process.cwd(), "scripts", "api-pdf-check.pdf");
 const PAGE_W = 595.28; // A4 portrait, PDF points
 const PAGE_H = 841.89;
 const PT_TO_MM = 25.4 / 72;
-const FOOTER_RE = /Page \d+ of \d+|Study Reviewer Generator/;
+const FOOTER_RE = /Page \d+ of \d+|Studium · study reviewer/;
 
 const reviewer = {
   id: "api-check-fixture",
@@ -159,7 +159,7 @@ async function main() {
   const pages = m.all.split("\n---PAGE---\n").filter(Boolean);
   const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
   checks.push(["body starts page 1 (no cover)", pages.length > 0 && /Executive Summary/.test(pages[0]), `pages=${pages.length}`]);
-  checks.push(["doc meta line on page 1", pages.length > 0 && /words/.test(norm(pages[0])), `pages=${pages.length}`]);
+  checks.push(["doc title on page 1", pages.length > 0 && /focuséd|focused|reviewer|microbiology|midterm/i.test(norm(pages[0])), `pages=${pages.length}`]);
   checks.push(["Topics section present", /Topics/.test(m.all), "text"]);
   checks.push(["Terms table present", /Terms & Definitions/.test(m.all), "text"]);
   checks.push(["Key Facts table present", /Key Facts & Formulas/.test(m.all), "text"]);

@@ -110,11 +110,9 @@ export default function PrintPanel({ reviewer }: { reviewer: ReviewerData }) {
         <span className="sr-doc-title-src" aria-hidden="true">
           {s.title}
         </span>
-        <p className="sr-doc-meta">
-          Study Reviewer &middot; {date} &middot; {s.docCount}{" "}
-          {s.docCount === 1 ? "document" : "documents"} &middot;{" "}
-          {s.totalWords.toLocaleString()} words
-        </p>
+        <h1 className="sr-doc-title">
+          {s.title}
+        </h1>
         <span className="rule" />
       </header>
 

@@ -330,9 +330,20 @@ async function main() {
 
   await page.locator("button:has-text('New session')").click();
   await page.waitForTimeout(500);
-  await page.locator("button:has-text('Sample')").click();
+
+  // 13a) Duplicate filename detection: upload the same file twice
+  await page.setInputFiles('input[type="file"]', [docxPath]);
+  await page.waitForTimeout(3000);
+  await page.setInputFiles('input[type="file"]', [docxPath]);
+  await page.waitForTimeout(600);
+  const dupSeen = await page.evaluate(() =>
+    document.body.textContent?.includes("already in your queue") ?? false
+  );
+  record("duplicate filename detected on re-upload", dupSeen);
+
+  await page.locator("button:has-text('Generate Study Reviewer')").click();
   await page.waitForSelector("button:has-text('Copy as Markdown')", { timeout: 120000 });
-  record("sample material generates reviewer", true);
+  record("reviewer generates after duplicate check", true);
 
   record("no page errors", errors.length === 0, errors.slice(0, 3).join(" | "));
 

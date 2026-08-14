@@ -58,15 +58,15 @@ export default function Flashcards({ terms }: { terms: TermDefinition[] }) {
           }}
         >
           <div
-            className="absolute inset-0 flex items-center justify-center rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+            className="absolute inset-0 flex items-center justify-center rounded-xl border border-zinc-200 bg-white p-6 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
             style={{ backfaceVisibility: "hidden" }}
           >
-            <p className="text-center text-xl font-bold text-zinc-900 dark:text-zinc-50">
+            <p className="text-center font-display text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
               {term.term}
             </p>
           </div>
           <div
-            className="absolute inset-0 flex items-center justify-center rounded-2xl border border-brand/40 bg-brand/5 p-6"
+            className="absolute inset-0 flex items-center justify-center rounded-xl border border-brand/40 bg-brand/5 p-6"
             style={{
               backfaceVisibility: "hidden",
               transform: "rotateY(180deg)",

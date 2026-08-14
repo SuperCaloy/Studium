@@ -1,4 +1,4 @@
-/* Study Reviewer print stylesheet
+/* Studium print stylesheet
    Plain CSS (no Tailwind) so the same file powers both the browser-print
    path (bundled via layout.tsx) and the /api/export-pdf route (read from
    disk and inlined). The API route renders with print media, matching the
@@ -31,7 +31,7 @@
     }
 
     @bottom-left {
-      content: "Study Reviewer Generator";
+      content: "Studium · study reviewer";
       font-family: Helvetica, Arial, sans-serif;
       font-size: 7.5pt;
       color: var(--sr-muted);
@@ -128,11 +128,11 @@
     margin-bottom: 22pt;
   }
 
-  .sr-doc-meta {
-    margin: 0 0 12pt;
-    font-size: 11.5pt;
-    font-weight: 600;
-    letter-spacing: 0.03em;
+  .sr-doc-title {
+    margin: 0 0 10pt;
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 20pt;
+    font-weight: 700;
     color: var(--sr-ink);
   }
 
@@ -276,7 +276,7 @@
 
   .sr-table td {
     padding: 5.5pt 9pt;
-    border: none;
+    border: 0.5pt solid var(--sr-hairline);
     vertical-align: top;
     line-height: 1.45;
   }

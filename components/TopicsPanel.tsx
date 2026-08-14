@@ -22,7 +22,7 @@ export default function TopicsPanel({ topics }: { topics: TopicAccordion[] }) {
         return (
           <div
             key={topic.id}
-            className="overflow-hidden rounded-2xl border border-zinc-200 bg-white transition dark:border-zinc-700 dark:bg-zinc-900"
+            className="overflow-hidden rounded-xl border border-zinc-200 bg-white transition dark:border-zinc-700 dark:bg-zinc-900"
           >
             <button
               onClick={() =>

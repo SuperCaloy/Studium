@@ -20,7 +20,7 @@ export default function SummaryPanel({ reviewer }: { reviewer: ReviewerData }) {
   return (
     <section className="animate-fade-in space-y-5">
       <div>
-        <h2 className="text-xl font-bold text-zinc-900 dark:text-zinc-50">
+        <h2 className="font-display text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
           {s.title}
         </h2>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -43,7 +43,7 @@ export default function SummaryPanel({ reviewer }: { reviewer: ReviewerData }) {
         ))}
       </div>
 
-      <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
         <h3 className="mb-2 flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
           <Lightbulb size={16} className="text-amber-500" /> Executive Summary
         </h3>
@@ -53,7 +53,7 @@ export default function SummaryPanel({ reviewer }: { reviewer: ReviewerData }) {
       </div>
 
       {s.keyTakeaways.length > 0 && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
           <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold text-zinc-900 dark:text-zinc-100">
             <Lightbulb size={16} className="text-brand" /> Key Takeaways
           </h3>

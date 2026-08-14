@@ -35,7 +35,7 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
     <div className="space-y-6">
       <ExportBar reviewer={reviewer} />
 
-      <div className="flex gap-2 overflow-x-auto pb-1">
+      <div className="flex gap-1.5 overflow-x-auto pb-1">
         {TABS.map((t) => {
           const Icon = t.icon;
           const badge = t.badge ? t.badge(reviewer) : 0;
@@ -44,10 +44,10 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition ${
+              className={`flex shrink-0 items-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition active:scale-[0.98] ${
                 active
                   ? "bg-brand text-white shadow-sm"
-                  : "border border-zinc-200 bg-white text-zinc-600 hover:border-brand hover:text-brand dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+                  : "text-zinc-600 hover:bg-brand/10 hover:text-brand dark:text-zinc-300 dark:hover:bg-brand/10 dark:hover:text-brand-light"
               }`}
             >
               <Icon size={15} />

@@ -18,7 +18,7 @@ export default function FactsPanel({ facts }: { facts: Fact[] }) {
         Formulas, equations, units, and constants extracted from your source
         material.
       </p>
-      <div className="overflow-hidden rounded-2xl border border-zinc-200 dark:border-zinc-700">
+      <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">
         <ul className="divide-y divide-zinc-100 bg-white dark:divide-zinc-800 dark:bg-zinc-900">
           {facts.map((f, i) => (
             <li key={i} className="px-5 py-4">
