@@ -80,7 +80,7 @@ async function main() {
   await page.locator('input[type="file"]').setInputFiles(PDF);
   await page.waitForTimeout(2500);
   await page.locator("button:has-text('Generate Study Reviewer')").click();
-  await page.waitForSelector("button:has-text('Copy as Markdown')", { timeout: 120000 });
+  await page.waitForSelector("button:has-text('Download PDF')", { timeout: 120000 });
   console.log("reviewer ready");
 
   // Evaluate computed styles in print media (matches how page.pdf renders)
@@ -88,21 +88,24 @@ async function main() {
   const designCss = await page.evaluate(() => {
     const panel = document.querySelector(".sr-panel");
     if (!panel) return "no print panel";
-    const meta = panel.querySelector(".sr-doc-meta");
+    const heading = panel.querySelector(".sr-doc-heading");
     const sectionH2 = panel.querySelector(".sr-section-heading h2");
     const sectionRule = panel.querySelector(".sr-section-heading .rule");
     const tableHead = panel.querySelector(".sr-table th");
     const row2 = panel.querySelector(".sr-table tbody tr:nth-child(2)");
+    const cell2 = row2 ? row2.querySelector("td") : null;
     const cover = panel.querySelector(".sr-cover");
     const quiz = panel.querySelector(".sr-quiz-item");
     const callout = panel.querySelector(".sr-callout");
     return JSON.stringify({
       panelDisplay: panel ? getComputedStyle(panel).display : "missing",
-      metaFont: meta ? getComputedStyle(meta).fontFamily : "missing",
+      headingFont: heading ? getComputedStyle(heading).fontFamily : "missing",
+      headingSize: heading ? getComputedStyle(heading).fontSize : "missing",
       sectionHeadingFont: sectionH2 ? getComputedStyle(sectionH2).fontFamily : "missing",
       sectionRuleBg: sectionRule ? getComputedStyle(sectionRule).backgroundColor : "missing",
       tableHeadBg: tableHead ? getComputedStyle(tableHead).backgroundColor : "missing",
       evenRowTint: row2 ? getComputedStyle(row2).backgroundColor : "missing",
+      cellBorderColor: cell2 ? getComputedStyle(cell2).borderTopColor : "missing",
       cover: cover ? "present" : "missing",
       quiz: quiz ? "present" : "missing",
       callout: callout ? "present" : "missing",
@@ -130,11 +133,11 @@ async function main() {
     pages.length > 0 && norm(pages[0]).includes("executivesummary");
   const checks: [string, boolean, string][] = [
     ["content starts page 1 (no cover)", bodyStartOk, `pages=${pages.length}`],
-    ["doc meta line on page 1", /words/.test(norm(pages[0] ?? "")), `pages=${pages.length}`],
-    ["section Executive Summary", /Executive Summary/.test(m1.all), "text"],
-    ["section Topics", /Topics/.test(m1.all), "text"],
-    ["section Terms & Definitions", /Terms & Definitions/.test(m1.all), "text"],
-    ["section Key Facts & Formulas", /Key Facts & Formulas/.test(m1.all), "text"],
+    ["title header on page 1", /reviewer/.test(norm(pages[0] ?? "")), `pages=${pages.length}`],
+    ["section Executive Summary", norm(m1.all).includes("executivesummary"), "text"],
+    ["section Topics", norm(m1.all).includes("topics"), "text"],
+    ["section Terms & Definitions", norm(m1.all).includes("terms&definitions"), "text"],
+    ["section Key Facts & Formulas", norm(m1.all).includes("keyfacts&formulas"), "text"],
     ["Key Takeaways panel", /keytakeaways/.test(norm(m1.all)), "text"],
     ["Topic N labels", /topic\d/.test(norm(m1.all)), "text"],
     ["no quiz section", !/Practice Quiz/.test(m1.all), "text"],
@@ -145,7 +148,10 @@ async function main() {
     ["cover page removed from DOM", /cover":"missing"/.test(designCss), designCss],
     ["quiz removed from DOM", /quiz":"missing"/.test(designCss), designCss],
     ["key takeaways callout present", /callout":"present"/.test(designCss), designCss],
-    ["big doc title removed from DOM", /"sr-doc-title"/.test(designCss) === false, designCss],
+    ["doc meta line removed from DOM", /"sr-doc-meta"/.test(designCss) === false, designCss],
+    ["title header set in Georgia", /headingFont":"[^"]*georgia/i.test(designCss), designCss],
+    ["title header large", /headingSize":"26\.6\d+px"/.test(designCss), designCss],
+    ["table cells have hairline grid", /cellBorderColor":"rgb\(226, 230, 233\)"/i.test(designCss), designCss],
     ["section heading set in Georgia", /sectionHeadingFont":".*georgia/i.test(designCss), designCss],
     ["section heading rule in accent teal", /sectionRuleBg":"rgb\(31, 95, 90\)"/.test(designCss), designCss],
     ["table header in accent teal", /tableHeadBg":"rgb\(31, 95, 90\)"/.test(designCss), designCss],

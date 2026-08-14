@@ -99,7 +99,7 @@ export async function POST(req: NextRequest) {
     });
   } catch {
     return NextResponse.json(
-      { error: "PDF generation failed. Please try the Print option instead." },
+      { error: "PDF generation failed. Please try again." },
       { status: 500 }
     );
   } finally {
