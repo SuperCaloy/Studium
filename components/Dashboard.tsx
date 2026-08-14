@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { LayoutDashboard, FolderOpen, BookMarked, Layers, ListChecks, FlaskConical } from "lucide-react";
+import { LayoutDashboard, FolderOpen, BookMarked, Layers, ListChecks, FlaskConical, Network } from "lucide-react";
 import type { ReviewerData } from "@/lib/types";
 import SummaryPanel from "./SummaryPanel";
 import TopicsPanel from "./TopicsPanel";
@@ -9,9 +9,10 @@ import TermsTable from "./TermsTable";
 import Flashcards from "./Flashcards";
 import Quiz from "./Quiz";
 import FactsPanel from "./FactsPanel";
+import ConceptMap from "./ConceptMap";
 import ExportBar from "./ExportBar";
 
-type Tab = "summary" | "topics" | "terms" | "facts" | "flashcards" | "quiz";
+type Tab = "summary" | "map" | "topics" | "terms" | "facts" | "flashcards" | "quiz";
 
 interface Props {
   reviewer: ReviewerData;
@@ -19,11 +20,12 @@ interface Props {
   onTargetChange: (n: number) => void;
 }
 
-const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard; badge?: (r: ReviewerData) => number }[] = [
+const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard; badge?: (r: ReviewerData) => number; show?: (r: ReviewerData) => boolean }[] = [
   { key: "summary", label: "Summary", icon: LayoutDashboard },
+  { key: "map", label: "Concept Map", icon: Network, show: (r) => r.engine === "ai" },
   { key: "topics", label: "Topics", icon: FolderOpen, badge: (r) => r.topics.length },
   { key: "terms", label: "Terms", icon: BookMarked, badge: (r) => r.terms.length },
-  { key: "facts", label: "Key Facts", icon: FlaskConical, badge: (r) => (r.facts ?? []).length },
+  { key: "facts", label: "Key Facts", icon: FlaskConical, badge: (r) => (r.facts ?? []).length, show: (r) => !!(r.facts && r.facts.length > 0) },
   { key: "flashcards", label: "Flashcards", icon: Layers, badge: (r) => r.terms.length },
   { key: "quiz", label: "Quiz", icon: ListChecks, badge: (r) => r.quizBank.length },
 ];
@@ -36,7 +38,7 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
       <ExportBar reviewer={reviewer} />
 
       <div className="flex gap-1.5 overflow-x-auto pb-1">
-        {TABS.map((t) => {
+        {TABS.filter(t => t.show ? t.show(reviewer) : true).map((t) => {
           const Icon = t.icon;
           const badge = t.badge ? t.badge(reviewer) : 0;
           const active = tab === t.key;
@@ -70,6 +72,7 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
 
       <div className="animate-fade-in">
         {tab === "summary" && <SummaryPanel reviewer={reviewer} />}
+        {tab === "map" && <ConceptMap reviewer={reviewer} />}
         {tab === "topics" && <TopicsPanel topics={reviewer.topics} />}
         {tab === "terms" && <TermsTable terms={reviewer.terms} />}
         {tab === "facts" && <FactsPanel facts={reviewer.facts ?? []} />}

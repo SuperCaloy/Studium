@@ -58,12 +58,11 @@ const serializeDocs = (docs: ExtractedDocument[]) =>
   }));
 
 const FEATURES = [
-  { icon: FileText, title: "Executive summary", text: "Every key idea, up front" },
-  { icon: FolderOpen, title: "Topic breakdowns", text: "Clear chapters for each subject" },
-  { icon: BookMarked, title: "Terms & definitions", text: "Every term, defined and searchable" },
-  { icon: Layers, title: "Flashcards", text: "Flip cards to lock it in" },
-  { icon: ListChecks, title: "Randomized quiz", text: "Up to 70 questions, reshuffled each time" },
-  { icon: FileDown, title: "Markdown & PDF export", text: "Export to Markdown or PDF" },
+  { icon: FileText, title: "Get to the point", text: "Skim the core concepts in seconds, not hours.", span: "sm:col-span-2 lg:col-span-2" },
+  { icon: FolderOpen, title: "Structured learning", text: "Your messy notes, automatically organized by subject.", span: "sm:col-span-1 lg:col-span-1" },
+  { icon: BookMarked, title: "Instant glossary", text: "Every key term extracted and defined.", span: "sm:col-span-1 lg:col-span-1" },
+  { icon: Layers, title: "Active recall, built-in", text: "Flip digital cards to lock information into your long-term memory.", span: "sm:col-span-2 lg:col-span-1" },
+  { icon: ListChecks, title: "Test yourself", text: "Custom quizzes generated dynamically to find your weak spots.", span: "sm:col-span-1 lg:col-span-1" },
 ];
 
 export default function Home() {
@@ -283,15 +282,14 @@ export default function Home() {
                 <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-brand dark:text-brand-light">
                   PDF / DOCX / TXT
                 </p>
-                <h2 className="mt-4 font-display text-4xl font-medium leading-[1.05] tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl">
-                  Turn your study materials into a{" "}
-                  <em className="font-display italic font-medium text-brand">
-                    reviewer that sticks
-                  </em>
+                <h2 className="mt-4 text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl lg:text-6xl">
+                  Upload your notes.{" "}
+                  <span className="text-brand dark:text-brand-light">
+                    Ace your exams.
+                  </span>
                 </h2>
                 <p className="mt-5 max-w-[52ch] text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
-                  Drop your notes and get a summary, terms, flashcards, and a
-                  quiz, all from your own files.
+                  Transform any PDF, Doc, or text file into a complete study guide in seconds. Get AI-generated flashcards, practice quizzes, and summaries built strictly from your materials.
                 </p>
               </div>
 
@@ -350,37 +348,39 @@ export default function Home() {
             </section>
 
             <section className="mt-20 border-t border-zinc-200 pt-12 dark:border-zinc-800">
-              <h2 className="font-display text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+              <h2 className="text-balance text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
                 What you get
               </h2>
               <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
                 One study pack, built entirely from your own files.
               </p>
-              <div className="mt-8 grid gap-3 sm:grid-cols-2">
+              <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 {FEATURES.map((f, i) => {
                   const Icon = f.icon;
-                  const tinted = i === 0 || i === 3 || i === 5;
+                  const isTinted = i === 0 || i === 3;
                   return (
                     <div
                       key={f.title}
-                      className={`group relative flex items-start gap-4 rounded-xl border p-5 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_16px_32px_-18px_rgba(15,118,110,0.4)] ${
-                        tinted
-                          ? "border-brand/15 bg-brand/[0.04] hover:border-brand/40 hover:bg-brand/[0.07] dark:bg-brand/[0.07] dark:hover:border-brand/50"
-                          : "border-zinc-200 bg-white hover:border-brand/40 dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-brand/50"
+                      className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border p-6 transition-[transform,border-color,box-shadow,background-color] duration-300 hover:-translate-y-1 hover:shadow-lg ${f.span} ${
+                        isTinted
+                          ? "border-brand/20 bg-brand/5 hover:border-brand/40 dark:border-brand/20 dark:bg-brand/10 dark:hover:border-brand/40"
+                          : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-zinc-700"
                       }`}
                     >
-                      <ChevronRight className="absolute right-4 top-5 h-4 w-4 -translate-x-1 text-brand opacity-0 transition-all duration-300 group-hover:translate-x-0 group-hover:opacity-100" />
-                      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand/10 text-brand transition-all duration-300 group-hover:scale-110 group-hover:bg-brand/15">
-                        <Icon size={18} />
-                      </span>
-                      <div>
-                        <p className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                      <div className="relative z-10">
+                        <span className={`mb-4 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-110 ${isTinted ? 'bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-light' : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300 group-hover:bg-brand/10 group-hover:text-brand dark:group-hover:bg-brand/20 dark:group-hover:text-brand-light'}`}>
+                          <Icon size={18} />
+                        </span>
+                        <h3 className="text-lg font-medium text-zinc-900 dark:text-zinc-100">
                           {f.title}
-                        </p>
-                        <p className="mt-0.5 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
+                        </h3>
+                        <p className="mt-2 text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
                           {f.text}
                         </p>
                       </div>
+                      {isTinted && (
+                        <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-brand/10 blur-2xl transition-colors duration-500 group-hover:bg-brand/20" />
+                      )}
                     </div>
                   );
                 })}
@@ -405,7 +405,7 @@ export default function Home() {
                     <Sparkles size={18} />
                   </span>
                   <div>
-                    <p className="font-display text-base font-semibold text-zinc-900 dark:text-zinc-100">
+                    <p className="text-base font-semibold text-zinc-900 dark:text-zinc-100">
                       Study reviewer ready
                     </p>
                     <p className="text-xs text-zinc-500 dark:text-zinc-400">

@@ -4,6 +4,7 @@ import type {
   ReviewerData,
   TermDefinition,
   TopicAccordion,
+  ConceptMapData,
 } from "./types";
 import { REVIEWER_SCHEMA_VERSION } from "./types";
 import { normalizeIds } from "./reviewer-generator";
@@ -14,6 +15,7 @@ export interface ProviderKeys {
   groq?: string[];
   openrouter?: string[];
   mistral?: string[];
+  sambanova?: string[];
 }
 
 interface ProviderConfig {
@@ -31,7 +33,7 @@ interface ProviderConfig {
 const MAX_CONTEXT_CHARS = 40000;
 const MAX_DOC_CHARS = 20000;
 
-const PROVIDERS: ProviderConfig[] = [
+const PROVIDERS = [
   {
     id: "mistral",
     name: "Mistral",
@@ -75,7 +77,18 @@ const PROVIDERS: ProviderConfig[] = [
     topicCap: 20,
     termCap: 100,
   },
-];
+  {
+    id: "sambanova",
+    name: "SambaNova",
+    kind: "openai",
+    baseUrl: "https://api.sambanova.ai/v1/chat/completions",
+    models: ["Meta-Llama-3.3-70B-Instruct"],
+    maxOutputTokens: 4096,
+    timeoutMs: 45000,
+    topicCap: 20,
+    termCap: 100,
+  },
+] satisfies ProviderConfig[];
 
 interface ShardParts {
   title?: string;
@@ -83,6 +96,7 @@ interface ShardParts {
   keyTakeaways?: string[];
   topics?: TopicAccordion[];
   terms?: TermDefinition[];
+  conceptMap?: ConceptMapData;
 }
 
 interface TaskResult<T> {
@@ -95,7 +109,8 @@ const TOPICS_SCHEMA = `{
   "title": "string",
   "overview": "string",
   "keyTakeaways": ["string"],
-  "topics": [{ "title": "string", "summary": "string", "details": [{ "heading": "string", "points": ["string"] }] }]
+  "topics": [{ "title": "string", "summary": "string", "details": [{ "heading": "string", "points": ["string"] }] }],
+  "conceptMap": { "isNeeded": true, "mappings": [["Source Concept", "relationship label", "Target Concept"]] }
 }`;
 
 const TERMS_SCHEMA = `{
@@ -133,7 +148,7 @@ function extractBalancedObjects(s: string): string[] {
 }
 
 function salvageJson(raw: string, arrayKey: string): unknown {
-  const cleaned = stripCodeFence(raw);
+  const cleaned = stripCodeFence(raw).slice(0, 500000);
   try {
     return JSON.parse(cleaned);
   } catch {
@@ -180,12 +195,14 @@ function buildTopicsPrompt(topicCap: number): string {
 
 Rules:
 1. IGNORE anything that looks like references, citations, bibliographies, ISBNs, URLs, copyright lines, school/logo boilerplate, tables of contents, or pretest/posttest question banks in the source.
-2. title: pick a meaningful subject title from the document headings; never use a course code, school/department name, or page furniture. A person's name is only allowed as a title when that person is genuinely the subject of the material (e.g. a hero, historical figure, doctor, or military leader the lesson is ABOUT). If the name only appears in a byline, signature, or instructor/faculty attribution line, never use it as the title or a topic title.
-3. overview: 2-3 sentences summarizing the material.
-4. keyTakeaways: 5-8 concise, factual takeaways drawn strictly from the text.
-5. topics: include EVERY major section the text supports, up to ${topicCap}. Each topic has a title, a 1-2 sentence summary, and as many details as the material supports (heading + bullet points). When a section is about a specific person (hero, historical figure, doctor, or military leader), use that person's name as the topic title. When a section is just instructor/faculty attribution (e.g. "Prepared by Dr. X", a byline, or a signature line), do not turn it into a topic.
-6. Never include placeholder text or ellipses like "...".
-7. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, add to, or completely discard any field if it is not directly grounded in the source text.`;
+2. COMPRESSION & SYNTHESIS: Your output MUST be significantly shorter and more concise than the source material. Summarize aggressively. Strictly avoid robotic meta-language (e.g., do NOT say "This document covers", "In this reviewer", "We will explore"). Deliver direct, high-impact conceptual takeaways immediately.
+3. ZERO RAW CODE: Exclude all source code syntax, programming boilerplate, and raw code blocks. Translate any code implementations into standard mathematical notation, theoretical formulas, or clean logical step-by-step workflows. Clearly define each formula and its variables.
+4. title: pick a meaningful subject title from the document headings. If multiple documents covering different subjects are provided, internally evaluate all subjects and synthesize the single most accurate, overarching title that connects them. Never use a course code, school/department name, or page furniture.
+5. overview: 2-3 sentences summarizing the material directly, without meta-introductions.
+6. keyTakeaways: 5-8 concise, factual takeaways drawn strictly from the text.
+7. topics: include up to ${topicCap} major sections. Each topic has a title, a 1-2 sentence summary, and details (heading + bullet points). Bullet points MUST be extremely concise (max 15-20 words each). Do not write paragraphs in bullet points.
+8. conceptMap: Evaluate if the material has complex relational concepts (e.g., biological processes, historical causes, system architectures) that would benefit from a visual mind map. If it's just a flat list of definitions, set "isNeeded": false. If "isNeeded": true, provide "mappings" as an array of 3-element arrays: [Source Concept, relationship, Target Concept]. Example: ["Chloroplasts", "contains", "Chlorophyll"]. Keep concepts short (1-3 words). Max 15 mappings.
+9. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, strictly compress, or discard fields as needed.`;
 }
 
 function buildTermsPrompt(termCap: number): string {
@@ -194,8 +211,9 @@ function buildTermsPrompt(termCap: number): string {
 Rules:
 1. IGNORE anything that looks like references, citations, bibliographies, ISBNs, URLs, copyright lines, school/logo boilerplate, tables of contents, or pretest/posttest question banks in the source.
 2. terms: a glossary of ALL important terms found in the text, up to ${termCap}, with definitions lifted/paraphrased from the text. Include the source document filename in sourceDoc for every term.
-3. Never include placeholder text or ellipses like "...".
-4. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, add to, or completely discard any field if it is not directly grounded in the source text.`;
+3. ACCURACY & PRECISION: Provide concise, conceptually exact definitions derived strictly from the source context without ambiguity.
+4. BREVITY: Definitions MUST be extremely concise (1-2 sentences maximum, under 30 words).
+5. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, summarize, or discard any field.`;
 }
 
 function assembleReviewer(
@@ -220,19 +238,20 @@ function assembleReviewer(
     createdAt: Date.now(),
     updatedAt: Date.now(),
     summary: {
-      title: parts.title || draft?.title || "Study Reviewer",
+      title: parts.title || draft?.title || "Study Material",
       overview: parts.overview || draft?.overview || "",
       keyTakeaways:
         (parts.keyTakeaways && parts.keyTakeaways.length > 0
           ? parts.keyTakeaways
           : draft?.keyTakeaways) ?? [],
       docCount: docs.length,
-      totalPages: docs.reduce((s, d) => s + (d.pageCount ?? 0), 0),
+      totalPages: docs.reduce((s, d) => s + (d.pageCount || 1), 0),
       totalWords,
-      targetStudyMinutes: Math.max(10, Math.round(totalWords / 220)),
+      targetStudyMinutes: Math.max(5, Math.ceil(totalWords / 200)),
     },
     topics,
     terms,
+    conceptMap: parts.conceptMap,
     facts,
     quizBank: [],
     engine: "ai",
@@ -253,15 +272,14 @@ let rotationOffset = 0;
 
 function preferredFor(
   taskIndex: number,
-  geminiSlot: number,
   available: string[]
 ): TaskPreference {
+  if (available.includes("gemini")) {
+    return { providerId: "gemini", keyIndex: taskIndex + rotationOffset };
+  }
   const pool = available.length > 0 ? available : PROVIDER_ORDER;
   const providerId = pool[(taskIndex + rotationOffset) % pool.length];
-  return {
-    providerId,
-    keyIndex: providerId === "gemini" ? geminiSlot : 0,
-  };
+  return { providerId, keyIndex: 0 };
 }
 
 async function runTask<T>(
@@ -291,9 +309,10 @@ async function runTask<T>(
     const { systemPrompt, schema } = build(provider);
     const startKey =
       preference && provider.id === preference.providerId
-        ? Math.min(preference.keyIndex, apiKeys.length - 1)
+        ? preference.keyIndex % apiKeys.length
         : 0;
-    for (let ki = startKey; ki < apiKeys.length; ki++) {
+    for (let count = 0; count < apiKeys.length; count++) {
+      const ki = (startKey + count) % apiKeys.length;
       for (const model of models) {
         try {
           const raw = await callWith429Retry(
@@ -482,28 +501,62 @@ export interface CardsResult {
   reviewer: ReviewerData;
 }
 
-function isCondensableLine(line: string): boolean {
-  if (line.length === 0) return true;
-  if (line.length > 180) return false;
-  if (
-    /(\d+([.,]\d+)?\s*(%|ml|mg|g|kg|mg\/dL|mmol\/L|units?|U|hrs?|hours?|min|sec|mmHg|mEq\/L|IU|k|m|cm|mm))|=\s*[-+]?\d|^\s*[-*•]\s*[A-Z0-9]|\b(?:define|definition|formula|equation|constant|normal\s+range|reference\s+range|normal\s+value|lab\s+value|parameter|unit|conversion|rule|law|principle|complication|contraindication|indication|side\s+effect|adverse|dose|dosage|signs?|symptoms?|test|diagnostic|criterion|criteria)\b/i.test(
-      line
-    )
-  )
-    return true;
-  return false;
+export function stripCodeBlocks(text: string): string {
+  // Cheap regex pre-filter as a cost optimization before LLM
+  return text.replace(/```[\s\S]*?```/g, (match) => {
+    if (match.length > 300) {
+      return "```\n[Code block omitted for cost optimization - assume standard implementation]\n```";
+    }
+    return match;
+  });
 }
 
-function condenseDoc(doc: ExtractedDocument): string {
-  const lines = doc.text.split(/\r?\n/);
-  if (lines.length <= 80) return doc.text;
-  const head = lines.slice(0, 8).join("\n");
-  const kept: string[] = [];
-  for (const line of lines.slice(8)) {
-    if (kept.length >= 500) break;
-    if (isCondensableLine(line)) kept.push(line.trim());
+export function condenseDoc(doc: ExtractedDocument): string {
+  let text = stripCodeBlocks(doc.text);
+  const lines = text.split(/\r?\n/);
+  if (lines.length <= 150) return text;
+
+  const chunks: { heading: string; lines: string[] }[] = [];
+  let currentHeading = "Document Start";
+  let currentLines: string[] = [];
+
+  for (const line of lines) {
+    // Hierarchy chunking by markdown headers or numeric sections
+    if (/^(#{1,4}\s+|(\d+\.)+\s+[A-Z])/.test(line.trim())) {
+      if (currentLines.length > 0) {
+        chunks.push({ heading: currentHeading, lines: currentLines });
+      }
+      currentHeading = line.trim();
+      currentLines = [];
+    } else {
+      currentLines.push(line);
+    }
   }
-  return `${head}\n\n[... excerpted; key lines below ...]\n${kept.join("\n")}`;
+  if (currentLines.length > 0) {
+    chunks.push({ heading: currentHeading, lines: currentLines });
+  }
+
+  // Fallback for headerless docs
+  if (chunks.length <= 1) {
+    if (lines.length <= 500) return text;
+    const kept = lines.slice(0, 250).concat(["\n[... excerpted ...]\n"], lines.slice(-250));
+    return kept.join("\n");
+  }
+
+  let keptText = "";
+  let chars = 0;
+  for (const chunk of chunks) {
+    const chunkStr = `\n${chunk.heading}\n` + chunk.lines.join("\n");
+    if (chars + chunkStr.length < 15000) {
+      keptText += chunkStr + "\n";
+      chars += chunkStr.length;
+    } else {
+      const brief = `\n${chunk.heading}\n` + chunk.lines.slice(0, 5).join("\n") + "\n[...]\n";
+      keptText += brief;
+      chars += brief.length;
+    }
+  }
+  return keptText.trim();
 }
 
 function buildUserContent(
@@ -545,11 +598,11 @@ export async function generateCards(
     const ks = keys[id];
     return ks && ks.length > 0;
   });
-  rotationOffset = (rotationOffset + 1) % (available.length || 1);
+  // Advance offset for key distribution if Gemini is prioritized
+  rotationOffset = (rotationOffset + 1) % 100;
 
   const preferences: TaskPreference[] = Array.from({ length: 2 }, (_, i) => {
-    const pref = preferredFor(i, 0, available);
-    return pref;
+    return preferredFor(i, available);
   });
 
   const tasks: Promise<TaskResult<ShardParts> | null>[] = [

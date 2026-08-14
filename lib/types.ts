@@ -72,6 +72,11 @@ export interface Fact {
   context: string;
 }
 
+export interface ConceptMapData {
+  isNeeded: boolean;
+  mappings?: string[][]; // [source, label, target]
+}
+
 export const REVIEWER_SCHEMA_VERSION = 2;
 
 export interface ReviewerData {
@@ -83,6 +88,7 @@ export interface ReviewerData {
   terms: TermDefinition[];
   facts: Fact[];
   quizBank: QuizQuestion[];
+  conceptMap?: ConceptMapData;
   engine: "ai" | "offline";
   version?: number;
 }

@@ -9,10 +9,25 @@ import type { ReviewerData } from "@/lib/types";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const DEFAULT_CHROMIUM_EXE =
-  "C:/Users/caloy/AppData/Local/ms-playwright/chromium-1217/chrome-win64/chrome.exe";
+import chromiumHelper from "@sparticuz/chromium";
 
-const CHROMIUM_EXE = process.env.PLAYWRIGHT_CHROMIUM_PATH || DEFAULT_CHROMIUM_EXE;
+import { existsSync } from "node:fs";
+
+const isLocal = process.env.NODE_ENV === "development";
+const getLocalChromiumPath = () => {
+  if (process.env.PLAYWRIGHT_CHROMIUM_PATH) return process.env.PLAYWRIGHT_CHROMIUM_PATH;
+  const paths = [
+    "C:/Program Files/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Google/Chrome/Application/chrome.exe",
+    "C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe",
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+  ];
+  for (const p of paths) {
+    if (existsSync(p)) return p;
+  }
+  return "C:/Program Files/Google/Chrome/Application/chrome.exe";
+};
+const CHROMIUM_EXE = getLocalChromiumPath();
 
 function isValidReviewer(value: unknown): value is ReviewerData {
   if (!value || typeof value !== "object") return false;
@@ -78,7 +93,11 @@ export async function POST(req: NextRequest) {
 
   let browser;
   try {
-    browser = await chromium.launch({ executablePath: CHROMIUM_EXE, headless: true });
+    browser = await chromium.launch({
+      args: isLocal ? [] : chromiumHelper.args,
+      executablePath: isLocal ? CHROMIUM_EXE : await chromiumHelper.executablePath(),
+      headless: true,
+    });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
@@ -97,9 +116,9 @@ export async function POST(req: NextRequest) {
         "Cache-Control": "no-store",
       },
     });
-  } catch {
+  } catch (err) {
     return NextResponse.json(
-      { error: "PDF generation failed. Please try the Print option instead." },
+      { error: "PDF generation failed. " + (err instanceof Error ? err.message : String(err)) },
       { status: 500 }
     );
   } finally {

@@ -50,14 +50,14 @@
   }
 
   :root {
-    --sr-accent: #1f5f5a;
-    --sr-accent-deep: #174a46;
+    --sr-accent: #3D4A5A; /* Slate */
+    --sr-accent-deep: #1e293b;
     --sr-paper: #ffffff;
-    --sr-ink: #1b2430;
-    --sr-body: #33404d;
-    --sr-muted: #5b6672;
-    --sr-hairline: #e2e6e9;
-    --sr-row: #ffffff;
+    --sr-ink: #111827;
+    --sr-body: #374151;
+    --sr-muted: #6b7280;
+    --sr-hairline: #e5e7eb;
+    --sr-row: #f9fafb;
   }
 
   html,
@@ -130,9 +130,10 @@
 
   .sr-doc-title {
     margin: 0 0 10pt;
-    font-family: Georgia, "Times New Roman", serif;
+    font-family: Helvetica, Arial, sans-serif;
     font-size: 20pt;
     font-weight: 700;
+    letter-spacing: -0.02em;
     color: var(--sr-ink);
   }
 
@@ -158,9 +159,10 @@
 
   .sr-section-heading h2 {
     margin: 0 0 7pt;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 15pt;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 14pt;
     font-weight: 700;
+    letter-spacing: -0.01em;
     color: var(--sr-ink);
   }
 
@@ -214,8 +216,8 @@
 
   .sr-topic-title {
     margin: 0 0 3pt;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 13pt;
+    font-family: Helvetica, Arial, sans-serif;
+    font-size: 12pt;
     font-weight: 700;
     color: var(--sr-ink);
   }

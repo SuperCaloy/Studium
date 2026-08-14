@@ -263,6 +263,11 @@ function extractProtectedSpans(text: string): ProtectedSpan[] {
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
     if (t.length < 2 || t.length > 300) continue;
+    
+    // Explicitly reject programming code across any language (Java, Python, JS, SQL, HTML) without breaking math
+    const looksLikeCode = /(?:^|\s)(?:public|private|protected|static|final|void|class|interface|extends|implements|import|export|function|def|return)\s/i.test(t) || /(?:if|for|while|switch|catch)\s*\(/i.test(t) || /\b(?:this\.|console\.|System\.|print\()/.test(t) || /(?:==|===|!=|!==|=>|->)/.test(t) || /;\s*$/.test(t) || /<[a-z]+[^>]*>/i.test(t) || /^(?:SELECT|UPDATE|INSERT|DELETE|CREATE)\s/i.test(t);
+    if (looksLikeCode) continue;
+
     const hasOperators = /(?:[^=]|^)=|→|←|√|²|³|⁴|±|×|·|÷|∑|∫|Δ|π|Ω/.test(t);
     if (!hasOperators) continue;
     const looksLikeEquation =
@@ -346,10 +351,20 @@ interface FrequencyEntry {
 }
 
 function computeFrequencies(text: string): FrequencyEntry[] {
-  const tokens = tokenize(text).filter((t) => !STOPWORDS.has(t));
   const map = new Map<string, number>();
-  for (const t of tokens) {
-    map.set(t, (map.get(t) ?? 0) + 1);
+  const sentences = splitSentences(text);
+  for (const sentence of sentences) {
+    const toks = tokenize(sentence);
+    const valid = toks.map(t => ({ t, stop: STOPWORDS.has(t) }));
+    for (let i = 0; i < valid.length; i++) {
+      if (!valid[i].stop) {
+        map.set(valid[i].t, (map.get(valid[i].t) ?? 0) + 1);
+      }
+      if (i < valid.length - 1 && !valid[i].stop && !valid[i+1].stop) {
+        const bigram = `${valid[i].t} ${valid[i+1].t}`;
+        map.set(bigram, (map.get(bigram) ?? 0) + 1);
+      }
+    }
   }
   return Array.from(map.entries())
     .map(([word, count]) => ({ word, count }))
@@ -359,27 +374,18 @@ function computeFrequencies(text: string): FrequencyEntry[] {
 const CODE_DOT = "\uE000";
 
 function splitSentences(text: string): string[] {
+  const segmenter = new Intl.Segmenter('en', { granularity: 'sentence' });
   const protectedSpans: string[] = [];
   const t = text
     .replace(/`[^`]+`/g, (m) => {
       protectedSpans.push(m);
       return `\uE001${protectedSpans.length - 1}\uE001`;
-    })
-    .replace(/\./g, (m, idx, full) => {
-      const before = full[idx - 1] ?? "";
-      const after = full[idx + 1] ?? "";
-      if (/[a-z0-9_)]/.test(before) && /[a-z0-9_(]/.test(after)) return CODE_DOT;
-      return m;
     });
-  const parts = t.split(/(?<=[.!?])\s+(?=[A-Z0-9"(])/);
-  return parts
-    .map((s) =>
-      s
-        .replace(new RegExp(CODE_DOT, "g"), ".")
-        .replace(/\uE001(\d+)\uE001/g, (_, i) => protectedSpans[Number(i)] ?? "")
-        .trim()
-    )
-    .filter((s) => s.length > 20);
+  
+  const segments = Array.from(segmenter.segment(t));
+  return segments
+    .map(s => s.segment.replace(/\uE001(\d+)\uE001/g, (_, i) => protectedSpans[Number(i)] ?? "").trim())
+    .filter(s => s.length > 20);
 }
 
 function extractHeadingCandidates(lines: string[]): string[] {
@@ -435,7 +441,12 @@ function findDefinitionForWord(
       DEFINITION_PATTERNS.some((p) => p.test(s))
   );
   if (defSentences.length > 0) return defSentences[0];
-  return sentences.find((s) => re.test(s) && !isQuestionLike(s));
+  return sentences.find((s) => {
+    if (!re.test(s) || isQuestionLike(s)) return false;
+    // Fallback must be a descriptive sentence, not just a heading or short fragment
+    if (s.length < 30 || s.toUpperCase() === s) return false; 
+    return /\b(is|are|was|were|has|have|do|does|can|could|will|would|should|provides|contains|generates|forms|uses|causes|creates|divides|performs|refers|means|represents)\b/i.test(s);
+  });
 }
 
 function termScore(word: string): number {
@@ -530,6 +541,15 @@ function extractTerms(
 
   const candidateTerms = new Set<string>();
 
+  const acronymRegex = /((?:[A-Z][a-zA-Z\-]+\s+){1,5}[A-Z][a-zA-Z\-]+)\s+\(([A-Z]{2,6})\)/g;
+  for (const m of text.matchAll(acronymRegex)) {
+    const term = m[2];
+    const def = `${term} stands for ${m[1].trim()}`;
+    const sourceDoc = findSourceDoc(m[0], sourceDocs);
+    pushTerm(term, def, sourceDoc);
+    candidateTerms.add(stemKey(term));
+  }
+
   for (const sentence of sentences) {
     if (isQuestionLike(sentence)) continue;
     for (const pattern of DEFINITION_PATTERNS) {
@@ -552,12 +572,7 @@ function extractTerms(
   for (const term of extractCodeTerms(text)) {
     const key = stemKey(term);
     if (candidateTerms.has(key)) continue;
-    const def =
-      findDefinitionForWord(term, sentences) ??
-      (() => {
-        const idx = text.toLowerCase().indexOf(term.toLowerCase());
-        return idx === -1 ? undefined : snippetAround(text, idx);
-      })();
+    const def = findDefinitionForWord(term, sentences);
     if (!def) continue;
     pushTerm(term, def, findSourceDoc(def, sourceDocs));
     candidateTerms.add(key);
@@ -649,7 +664,12 @@ function sectionsFromHeadings(
     const end = k + 1 < idxs.length ? idxs[k + 1].i : docText.length;
     const body = docText.slice(start, end);
     if (body.replace(/\s/g, "").length >= 60) {
-      out.push({ title: idxs[k].h.replace(/[:.\-]\s*$/, "").trim(), body });
+      let rawTitle = idxs[k].h.replace(/[:.\-]\s*$/, "").trim();
+      rawTitle = rawTitle.replace(/^[•●◦▪*=\-–—]\s*/, "").replace(/^\d+\.\s*/, "").trim();
+      if (rawTitle.includes(" - ") && rawTitle.length > 40) {
+        rawTitle = rawTitle.split(" - ")[0].trim();
+      }
+      out.push({ title: rawTitle, body });
     }
   }
   return out;
@@ -672,7 +692,7 @@ function deriveTitle(body: string): string {
 function chunkText(docText: string): { title: string; body: string }[] {
   const sentences = splitSentences(docText);
   if (sentences.length === 0) return [];
-  const perChunk = sentences.length <= 8 ? 3 : 4;
+  const perChunk = sentences.length <= 15 ? sentences.length : 12;
   const chunks: { title: string; body: string }[] = [];
   for (let i = 0; i < sentences.length; i += perChunk) {
     const body = sentences.slice(i, i + perChunk).join(" ");
@@ -703,7 +723,7 @@ function buildTopic(
   const secLower = section.body.toLowerCase();
   const sectionTerms = terms
     .filter((t) => secLower.includes(t.term.toLowerCase()))
-    .slice(0, 6);
+    .slice(0, 4);
   const secFreq = computeFrequencies(section.body);
   const freqMap = new Map(secFreq.map((f) => [f.word, f.count]));
   const secTermsLower = sectionTerms.map((t) => t.term.toLowerCase());
@@ -733,8 +753,8 @@ function buildTopic(
       return { s, score };
     })
     .sort((a, b) => b.score - a.score)
-    .slice(0, 8)
-    .map((x) => x.s.slice(0, 220))
+    .slice(0, 5)
+    .map((x) => x.s.replace(/^[•●◦▪*=\-–—]\s*/, "").replace(/^\d+\.\s*/, "").trim().slice(0, 220))
     .sort(
       (a, b) =>
         section.body.indexOf(a) - section.body.indexOf(b) ||
@@ -744,7 +764,7 @@ function buildTopic(
 
   const details: TopicDetail[] = [];
   for (const st of sectionTerms) {
-    if (details.length >= 6) break;
+    if (details.length >= 4) break;
     details.push({
       id: `det-${st.id}`,
       heading: st.term,
@@ -770,7 +790,7 @@ function buildTopic(
     id: `topic-${section.title}`,
     title: section.title,
     summary: points[0] ?? sentences[0]?.slice(0, 200) ?? section.body.slice(0, 200),
-    details: uniqueBy(details, (d) => d.heading).slice(0, 8),
+    details: uniqueBy(details, (d) => d.heading).slice(0, 5),
   };
 }
 
@@ -802,28 +822,56 @@ function buildTopicsForDocs(
   const cleanFileName = (name: string) =>
     name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || name;
 
+  // 1. Gather all sections from all documents
+  const allSections: { title: string; body: string; source: string }[] = [];
+  
   for (const [name, docText] of sourceDocs.entries()) {
-    if (topics.length >= topicCap) break;
     const headings = extractHeadingCandidates(docText.split(/\n+/));
     const sections =
       headings.length >= 2
         ? sectionsFromHeadings(docText, headings)
-        : chunkText(docText);
+        : chunkText(docText); // fallback for headerless docs
     for (const sec of sections) {
-      if (topics.length >= topicCap) break;
-      const topic = buildTopic(sec, terms, topicCap < 40);
-      if (!topic) continue;
-      let title = topic.title;
-      if (usedTitles.has(title.toLowerCase())) {
-        title = `${title} (${cleanFileName(name)})`;
-      }
-      usedTitles.add(title.toLowerCase());
-      topics.push({
-        ...topic,
-        id: `topic-${topics.length}`,
-        title,
+      allSections.push({ ...sec, source: name });
+    }
+  }
+
+  // 2. Heading-similarity deduplication (cross-file merging)
+  const mergedSections: { title: string; body: string; sources: Set<string> }[] = [];
+  for (const sec of allSections) {
+    const existing = mergedSections.find(
+      (m) =>
+        similarity(m.title, sec.title) > 0.6 ||
+        m.title.toLowerCase() === sec.title.toLowerCase()
+    );
+    if (existing) {
+      existing.body += "\n\n" + sec.body;
+      existing.sources.add(sec.source);
+    } else {
+      mergedSections.push({
+        title: sec.title,
+        body: sec.body,
+        sources: new Set([sec.source]),
       });
     }
+  }
+
+  // 3. Build topics
+  for (const sec of mergedSections) {
+    if (topics.length >= topicCap) break;
+    const topic = buildTopic(sec, terms, topicCap < 40);
+    if (!topic) continue;
+    let title = topic.title;
+    if (usedTitles.has(title.toLowerCase())) {
+      const srcs = Array.from(sec.sources).map(cleanFileName).join(", ");
+      title = `${title} (${srcs})`;
+    }
+    usedTitles.add(title.toLowerCase());
+    topics.push({
+      ...topic,
+      id: `topic-${topics.length}`,
+      title,
+    });
   }
 
   if (topics.length === 0) {
@@ -1039,17 +1087,17 @@ export function buildQuiz(
     if (questions.length >= questionTarget) break;
     const ansKey = term.definition.toLowerCase();
     if (usedAnswers.has(ansKey)) continue;
-    const distractors = shuffle(
-      cleanTerms
-        .filter(
-          (t) =>
-            t.id !== term.id &&
-            t.definition.toLowerCase() !== ansKey &&
-            similarity(t.definition, term.definition) < 0.55
-        )
-        .map((t) => t.definition)
-    )
-      .filter((d, i, arr) => arr.findIndex((x) => x === d) === i)
+    const sameContext = cleanTerms.filter((t) => t.id !== term.id && t.sourceDoc === term.sourceDoc && t.definition.toLowerCase() !== ansKey);
+    const otherContext = cleanTerms.filter((t) => t.id !== term.id && t.sourceDoc !== term.sourceDoc && t.definition.toLowerCase() !== ansKey);
+    
+    let distractorPool = shuffle(sameContext).map(t => t.definition);
+    if (distractorPool.length < 3) {
+       distractorPool = distractorPool.concat(shuffle(otherContext).map(t => t.definition));
+    }
+    
+    const distractors = distractorPool
+      .filter((d) => similarity(d, term.definition) < 0.55)
+      .filter((d, i, arr) => arr.indexOf(d) === i)
       .slice(0, 3);
     if (distractors.length < 3) continue;
     usedAnswers.add(ansKey);
@@ -1315,8 +1363,8 @@ export function prepareDraft(docs: ExtractedDocument[]): {
   const sourceDocs = new Map(cleanedDocs.map((d) => [d.name, d.text]));
   const wordCount = text.split(/\s+/).length;
   const isShort = wordCount < 800;
-  const termCap = Math.max(30, Math.min(isShort ? 200 : 300, Math.round(wordCount / 12)));
-  const topicCap = Math.max(8, Math.min(60, Math.round(wordCount / 100)));
+  const termCap = Math.max(15, Math.min(isShort ? 30 : 60, Math.round(wordCount / 40)));
+  const topicCap = Math.max(5, Math.min(15, Math.round(wordCount / 250)));
 
   const protectedSpans = extractProtectedSpans(text);
   const protectedFacts = protectedSpans.map((s) => s.formula);
@@ -1364,7 +1412,7 @@ export function prepareDraft(docs: ExtractedDocument[]): {
         return { s, score: (imp + hasFact + density * 2) * lead };
       })
       .sort((a, b) => b.score - a.score)
-      .map((x) => x.s)
+      .map((x) => x.s.replace(/^[•●◦▪*=\-–—]\s*/, "").replace(/^\d+\.\s*/, "").trim())
       .filter(
         (s, idx, arr) =>
           !arr.slice(0, idx).some((p) => similarity(p, s) > 0.55)
