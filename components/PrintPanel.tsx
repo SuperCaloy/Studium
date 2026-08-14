@@ -107,7 +107,9 @@ export default function PrintPanel({ reviewer }: { reviewer: ReviewerData }) {
   return (
     <div className="sr-panel">
       <header className="sr-doc-head">
-        <h1 className="sr-doc-title">{s.title}</h1>
+        <span className="sr-doc-title-src" aria-hidden="true">
+          {s.title}
+        </span>
         <p className="sr-doc-meta">
           Study Reviewer &middot; {date} &middot; {s.docCount}{" "}
           {s.docCount === 1 ? "document" : "documents"} &middot;{" "}

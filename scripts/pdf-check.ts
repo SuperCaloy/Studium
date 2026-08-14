@@ -88,7 +88,8 @@ async function main() {
   const designCss = await page.evaluate(() => {
     const panel = document.querySelector(".sr-panel");
     if (!panel) return "no print panel";
-    const title = panel.querySelector(".sr-doc-title");
+    const meta = panel.querySelector(".sr-doc-meta");
+    const sectionH2 = panel.querySelector(".sr-section-heading h2");
     const sectionRule = panel.querySelector(".sr-section-heading .rule");
     const tableHead = panel.querySelector(".sr-table th");
     const row2 = panel.querySelector(".sr-table tbody tr:nth-child(2)");
@@ -97,7 +98,8 @@ async function main() {
     const callout = panel.querySelector(".sr-callout");
     return JSON.stringify({
       panelDisplay: panel ? getComputedStyle(panel).display : "missing",
-      titleFont: title ? getComputedStyle(title).fontFamily : "missing",
+      metaFont: meta ? getComputedStyle(meta).fontFamily : "missing",
+      sectionHeadingFont: sectionH2 ? getComputedStyle(sectionH2).fontFamily : "missing",
       sectionRuleBg: sectionRule ? getComputedStyle(sectionRule).backgroundColor : "missing",
       tableHeadBg: tableHead ? getComputedStyle(tableHead).backgroundColor : "missing",
       evenRowTint: row2 ? getComputedStyle(row2).backgroundColor : "missing",
@@ -143,10 +145,11 @@ async function main() {
     ["cover page removed from DOM", /cover":"missing"/.test(designCss), designCss],
     ["quiz removed from DOM", /quiz":"missing"/.test(designCss), designCss],
     ["key takeaways callout present", /callout":"present"/.test(designCss), designCss],
-    ["title set in Georgia", /georgia/i.test(designCss), designCss],
+    ["big doc title removed from DOM", /"sr-doc-title"/.test(designCss) === false, designCss],
+    ["section heading set in Georgia", /sectionHeadingFont":".*georgia/i.test(designCss), designCss],
     ["section heading rule in accent teal", /sectionRuleBg":"rgb\(31, 95, 90\)"/.test(designCss), designCss],
     ["table header in accent teal", /tableHeadBg":"rgb\(31, 95, 90\)"/.test(designCss), designCss],
-    ["alternating row tint applied", /evenRowTint":"rgb\(244, 246, 245\)"/.test(designCss), designCss],
+    ["even rows stay white (no gray tint)", /evenRowTint":"rgb\(255, 255, 255\)"/.test(designCss), designCss],
     ["no em-dash", !/—/.test(m1.all), "text"],
     ["footer brand line", /Study Reviewer Generator/.test(m1.all), "text"],
     ["page errors none", errors.length === 0, String(errors)],

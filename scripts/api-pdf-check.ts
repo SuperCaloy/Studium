@@ -158,7 +158,6 @@ async function main() {
 
   const pages = m.all.split("\n---PAGE---\n").filter(Boolean);
   const norm = (s: string) => s.replace(/\s+/g, "").toLowerCase();
-  checks.push(["title on page 1", pages.length > 0 && norm(pages[0]).includes(norm("Microbiology Midterm Reviewer")), `pages=${pages.length}`]);
   checks.push(["body starts page 1 (no cover)", pages.length > 0 && /Executive Summary/.test(pages[0]), `pages=${pages.length}`]);
   checks.push(["doc meta line on page 1", pages.length > 0 && /words/.test(norm(pages[0])), `pages=${pages.length}`]);
   checks.push(["Topics section present", /Topics/.test(m.all), "text"]);

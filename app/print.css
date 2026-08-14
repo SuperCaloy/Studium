@@ -110,32 +110,30 @@
     widows: 3;
   }
 
-  .sr-doc-title {
+  .sr-doc-title-src {
     string-set: sr-title content();
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    visibility: hidden;
+    font-size: 0;
   }
 
   /* ---------------------------------------------------------------
-     Page 1 document title block (not a cover page)
+     Page 1 header line (meta only, no big title)
      --------------------------------------------------------------- */
 
   .sr-doc-head {
     margin-bottom: 22pt;
   }
 
-  .sr-doc-title {
-    margin: 0 0 4pt;
-    font-family: Georgia, "Times New Roman", serif;
-    font-size: 24pt;
-    font-weight: 700;
-    line-height: 1.15;
-    color: var(--sr-ink);
-  }
-
   .sr-doc-meta {
     margin: 0 0 12pt;
-    font-size: 9pt;
-    letter-spacing: 0.04em;
-    color: var(--sr-muted);
+    font-size: 11.5pt;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: var(--sr-ink);
   }
 
   .sr-doc-head .rule,

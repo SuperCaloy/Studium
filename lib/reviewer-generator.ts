@@ -182,7 +182,8 @@ function stripMetadataLines(text: string): string {
 
   const dropped: string[] = [];
   const out: string[] = [];
-  for (const line of lines) {
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
     if (line.length > 120) {
       out.push(line);
       continue;
@@ -194,10 +195,15 @@ function stripMetadataLines(text: string): string {
     const isInstHeader =
       METADATA_INSTITUTION_TOKEN.test(line) &&
       /^[A-Z][A-Z0-9'&.\-\s]{3,80}$/.test(line);
+    const isPersonName =
+      // Only treat a person-name line as metadata in the document header
+      // zone. Mid-document names heading real sections (e.g. "Dr. Jose
+      // Rizal", "Gen. Antonio Luna") are legitimate topics and must survive.
+      idx < 8 && PERSON_NAME_LINE.test(line);
     if (
       METADATA_LINE_PATTERNS.some((p) => p.test(line)) ||
       isInstHeader ||
-      PERSON_NAME_LINE.test(line)
+      isPersonName
     ) {
       dropped.push(line);
       continue;
@@ -378,13 +384,16 @@ function splitSentences(text: string): string[] {
 
 function extractHeadingCandidates(lines: string[]): string[] {
   const headings: string[] = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let idx = 0; idx < lines.length; idx++) {
+    const trimmed = lines[idx].trim();
     if (trimmed.length < 3 || trimmed.length > 90) continue;
     if (/^[a-z]/.test(trimmed) && !/^\d/.test(trimmed)) continue;
     if (trimmed.split(" ").length > 12) continue;
     if (trimmed.endsWith(".")) continue;
-    if (PERSON_NAME_LINE.test(trimmed)) continue;
+    // Only drop person-name lines in the document header/metadata zone
+    // (first few lines). Mid-document person names that head real sections
+    // (e.g. "Dr. Jose Rizal", "Gen. Antonio Luna") are legitimate topics.
+    if (idx < 8 && PERSON_NAME_LINE.test(trimmed)) continue;
     if (JUNK_HEADINGS.test(trimmed)) continue;
     if (HEADING_PATTERNS.some((p) => p.test(trimmed))) {
       headings.push(trimmed);
@@ -1363,6 +1372,7 @@ export function prepareDraft(docs: ExtractedDocument[]): {
   );
 
   const titleCandidates = headings.filter((h) => !PERSON_NAME_LINE.test(h));
+  const personCandidates = headings.filter((h) => PERSON_NAME_LINE.test(h));
   const numbered =
     titleCandidates.find((h) => !/^(chapter|section|lesson|module|unit|part)\s+\d/i.test(h)) ??
     titleCandidates[0];
@@ -1386,10 +1396,12 @@ export function prepareDraft(docs: ExtractedDocument[]): {
         ? cleanHeading(titleCandidates.find((h) => !BOILERPLATE.test(h))!)
         : numbered?.length
           ? cleanHeading(numbered)
-          : docs
-              .map((d) => cleanFileName(d.name))
-              .join(", ")
-              .slice(0, 80) || "Study Materials";
+          : personCandidates[0]?.length
+            ? cleanHeading(personCandidates[0])
+            : docs
+                .map((d) => cleanFileName(d.name))
+                .join(", ")
+                .slice(0, 80) || "Study Materials";
 
   return {
     cleanedDocs,

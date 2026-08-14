@@ -180,10 +180,10 @@ function buildTopicsPrompt(topicCap: number): string {
 
 Rules:
 1. IGNORE anything that looks like references, citations, bibliographies, ISBNs, URLs, copyright lines, school/logo boilerplate, tables of contents, or pretest/posttest question banks in the source.
-2. title: pick a meaningful subject title from the document headings; never use an instructor or professor name, course code, school/department name, or page furniture.
+2. title: pick a meaningful subject title from the document headings; never use a course code, school/department name, or page furniture. A person's name is only allowed as a title when that person is genuinely the subject of the material (e.g. a hero, historical figure, doctor, or military leader the lesson is ABOUT). If the name only appears in a byline, signature, or instructor/faculty attribution line, never use it as the title or a topic title.
 3. overview: 2-3 sentences summarizing the material.
 4. keyTakeaways: 5-8 concise, factual takeaways drawn strictly from the text.
-5. topics: include EVERY major section the text supports, up to ${topicCap}. Each topic has a title, a 1-2 sentence summary, and as many details as the material supports (heading + bullet points).
+5. topics: include EVERY major section the text supports, up to ${topicCap}. Each topic has a title, a 1-2 sentence summary, and as many details as the material supports (heading + bullet points). When a section is about a specific person (hero, historical figure, doctor, or military leader), use that person's name as the topic title. When a section is just instructor/faculty attribution (e.g. "Prepared by Dr. X", a byline, or a signature line), do not turn it into a topic.
 6. Never include placeholder text or ellipses like "...".
 7. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, add to, or completely discard any field if it is not directly grounded in the source text.`;
 }
@@ -247,11 +247,17 @@ interface TaskPreference {
 
 const PROVIDER_ORDER = PROVIDERS.map((p) => p.id);
 
+// Rotates which provider leads each task across requests so generation is
+// not always Mistral. The offset advances on every generateCards call.
+let rotationOffset = 0;
+
 function preferredFor(
   taskIndex: number,
-  geminiSlot: number
+  geminiSlot: number,
+  available: string[]
 ): TaskPreference {
-  const providerId = PROVIDER_ORDER[taskIndex % PROVIDER_ORDER.length];
+  const pool = available.length > 0 ? available : PROVIDER_ORDER;
+  const providerId = pool[(taskIndex + rotationOffset) % pool.length];
   return {
     providerId,
     keyIndex: providerId === "gemini" ? geminiSlot : 0,
@@ -534,8 +540,15 @@ export async function generateCards(
   const startedAt = Date.now();
   const failures: string[] = [];
 
+  // Only rotate among providers that actually have keys configured.
+  const available = PROVIDER_ORDER.filter((id) => {
+    const ks = keys[id];
+    return ks && ks.length > 0;
+  });
+  rotationOffset = (rotationOffset + 1) % (available.length || 1);
+
   const preferences: TaskPreference[] = Array.from({ length: 2 }, (_, i) => {
-    const pref = preferredFor(i, 0);
+    const pref = preferredFor(i, 0, available);
     return pref;
   });
 
