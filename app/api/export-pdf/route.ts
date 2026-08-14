@@ -1,18 +1,44 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createElement } from "react";
-import { chromium } from "playwright-core";
+import { chromium as playwright } from "playwright-core";
+import chromium from "@sparticuz/chromium-min";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import PrintPanel from "@/components/PrintPanel";
 import type { ReviewerData } from "@/lib/types";
+import { MAX_BODY_BYTES, clientIp, originAllowed, rateLimited } from "@/lib/api-helpers";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+let cachedCss: string | null = null;
+function getCss() {
+  if (cachedCss !== null) return cachedCss;
+  try {
+    cachedCss = readFileSync(join(process.cwd(), "app", "print.css"), "utf8");
+    return cachedCss;
+  } catch {
+    return "";
+  }
+}
+
 const DEFAULT_CHROMIUM_EXE =
   "C:/Users/caloy/AppData/Local/ms-playwright/chromium-1217/chrome-win64/chrome.exe";
 
-const CHROMIUM_EXE = process.env.PLAYWRIGHT_CHROMIUM_PATH || DEFAULT_CHROMIUM_EXE;
+async function getChromiumExecutable(): Promise<string> {
+  if (process.env.PLAYWRIGHT_CHROMIUM_PATH) {
+    return process.env.PLAYWRIGHT_CHROMIUM_PATH;
+  }
+  
+  const isDev = process.env.NODE_ENV === "development";
+  if (isDev) {
+    return DEFAULT_CHROMIUM_EXE;
+  }
+  
+  return await chromium.executablePath(
+    "https://github.com/Sparticuz/chromium/releases/download/v131.0.1/chromium-v131.0.1-pack.tar"
+  );
+}
 
 function isValidReviewer(value: unknown): value is ReviewerData {
   if (!value || typeof value !== "object") return false;
@@ -28,6 +54,25 @@ function isValidReviewer(value: unknown): value is ReviewerData {
 }
 
 export async function POST(req: NextRequest) {
+  if (!originAllowed(req)) {
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  }
+
+  if (await rateLimited(clientIp(req))) {
+    return NextResponse.json(
+      { error: "Too many requests. Please wait a minute and try again." },
+      { status: 429 }
+    );
+  }
+
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { error: "Request too large." },
+      { status: 413 }
+    );
+  }
+
   let body: unknown;
   try {
     body = await req.json();
@@ -50,10 +95,8 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  let css = "";
-  try {
-    css = readFileSync(join(process.cwd(), "app", "print.css"), "utf8");
-  } catch {
+  const css = getCss();
+  if (!css) {
     return NextResponse.json(
       { error: "Print stylesheet unavailable." },
       { status: 500 }
@@ -78,7 +121,14 @@ export async function POST(req: NextRequest) {
 
   let browser;
   try {
-    browser = await chromium.launch({ executablePath: CHROMIUM_EXE, headless: true });
+    const executablePath = await getChromiumExecutable();
+    const isDev = process.env.NODE_ENV === "development" && executablePath === DEFAULT_CHROMIUM_EXE;
+
+    browser = await playwright.launch({
+      args: isDev ? [] : chromium.args,
+      executablePath,
+      headless: true,
+    });
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "load" });
     const pdf = await page.pdf({
@@ -97,7 +147,8 @@ export async function POST(req: NextRequest) {
         "Cache-Control": "no-store",
       },
     });
-  } catch {
+  } catch (err) {
+    console.error("PDF Export failed:", err instanceof Error ? err.message : err);
     return NextResponse.json(
       { error: "PDF generation failed. Please try again." },
       { status: 500 }

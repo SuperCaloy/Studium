@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, FileDown, Loader2, X } from "lucide-react";
+import { Eye, FileDown, Loader2, Printer, X } from "lucide-react";
 import type { ReviewerData } from "@/lib/types";
 
 interface Props {
@@ -55,11 +55,20 @@ export default function ExportBar({ reviewer }: Props) {
       a.download = "study-reviewer.pdf";
       a.click();
       URL.revokeObjectURL(url);
-    } catch {
-      setError("PDF generation failed. Please try again.");
+    } catch (err) {
+      // Fallback for mobile browsers or when server PDF generation fails
+      try {
+        window.print();
+      } catch {
+        setError(err instanceof Error ? err.message : "PDF generation failed. Please try again.");
+      }
     } finally {
       setDownloading(false);
     }
+  };
+
+  const handlePrint = () => {
+    window.print();
   };
 
   const handlePreview = async () => {
@@ -95,6 +104,14 @@ export default function ExportBar({ reviewer }: Props) {
         >
           {downloading ? <Loader2 size={16} className="animate-spin" /> : <FileDown size={16} />}
           {downloading ? "Preparing PDF..." : "Download PDF"}
+        </button>
+
+        <button
+          onClick={handlePrint}
+          className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:border-brand hover:text-brand dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
+        >
+          <Printer size={16} />
+          Print / Save PDF
         </button>
       </div>
 

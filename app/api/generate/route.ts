@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateCards } from "@/lib/ai-generator";
+import type { ReviewerData } from "@/lib/types";
 import {
   buildOfflineReviewer,
   buildQuizFromReviewer,
@@ -17,7 +18,7 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 300;
+export const maxDuration = 60;
 
 export async function POST(req: NextRequest) {
   if (!originAllowed(req)) {
@@ -61,7 +62,7 @@ export async function POST(req: NextRequest) {
   const sourceText = docs.map((d) => d.text).join("\n\n");
   const questionTarget = 70;
 
-  let reviewer = buildOfflineReviewer(docs, 70);
+  let reviewer: ReviewerData | null = null;
   let fallback = false;
 
   if (hasAnyKey) {
@@ -94,6 +95,11 @@ export async function POST(req: NextRequest) {
       fallback = true;
       console.error(`[generate] ai failed, using offline: ${msg}`);
     }
+  }
+
+  if (!reviewer) {
+    fallback = true;
+    reviewer = buildOfflineReviewer(docs, 70);
   }
 
   if (reviewer.quizBank.length === 0) {

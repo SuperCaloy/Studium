@@ -19,7 +19,7 @@ export interface ProviderKeys {
   sambanova?: string[];
 }
 
-interface ProviderConfig {
+export interface ProviderConfig {
   id: keyof ProviderKeys;
   name: string;
   kind: "gemini" | "openai";
@@ -34,7 +34,7 @@ interface ProviderConfig {
 const MAX_CONTEXT_CHARS = 40000;
 const MAX_DOC_CHARS = 20000;
 
-const PROVIDERS = [
+export const PROVIDERS = [
   {
     id: "mistral",
     name: "Mistral",
@@ -454,7 +454,7 @@ async function callWith429Retry(
   }
 }
 
-async function callProvider(
+export async function callProvider(
   provider: ProviderConfig,
   apiKey: string,
   model: string,

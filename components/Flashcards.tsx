@@ -111,21 +111,19 @@ export default function Flashcards({ terms }: { terms: TermDefinition[] }) {
             className="absolute inset-0 w-full h-full cursor-pointer preserve-3d"
             onClick={() => setFlipped(!flipped)}
           >
-            {/* Front (Term) */}
             <div
-              className="absolute inset-0 flex items-center justify-center rounded-2xl border border-zinc-200 bg-white p-8 shadow-sm backface-hidden dark:border-zinc-800 dark:bg-zinc-900"
+              className="absolute inset-0 flex items-center justify-center rounded-2xl border border-zinc-200 bg-white p-6 sm:p-8 shadow-sm backface-hidden dark:border-zinc-800 dark:bg-zinc-900"
             >
-              <p className="text-center font-display text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
+              <p className="text-center font-display text-xl sm:text-2xl font-semibold text-zinc-900 dark:text-zinc-50">
                 {term.term}
               </p>
             </div>
 
-            {/* Back (Definition) */}
             <div
-              className="absolute inset-0 flex items-center justify-center rounded-2xl border border-brand/40 bg-brand/5 p-8 backface-hidden"
+              className="absolute inset-0 flex items-center justify-center rounded-2xl border border-brand/40 bg-brand/5 p-6 sm:p-8 backface-hidden"
               style={{ transform: "rotateY(180deg)" }}
             >
-              <div className="max-h-full overflow-y-auto w-full text-center scrollbar-hide">
+              <div className="max-h-full overflow-y-auto w-full text-center hide-scrollbar">
                 <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
                   {term.definition}
                 </p>

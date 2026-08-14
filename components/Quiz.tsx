@@ -17,6 +17,7 @@ interface Props {
   bank: QuizQuestion[];
   questionTarget: number;
   onTargetChange: (n: number) => void;
+  context?: string;
 }
 
 const TARGET_OPTIONS = [10, 20, 30, 50, 70];
@@ -32,7 +33,7 @@ function shuffle<T>(arr: T[]): T[] {
 
 type Status = "setup" | "running" | "finished";
 
-export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
+export default function Quiz({ bank, questionTarget, onTargetChange, context }: Props) {
   const [status, setStatus] = useState<Status>("setup");
   const [target, setTarget] = useState(questionTarget);
   const [session, setSession] = useState<QuizQuestion[]>([]);
@@ -54,35 +55,26 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
           options: q.options,
           selected: selectedIndex === -1 ? "Skipped" : q.options[selectedIndex],
           correct: q.options[q.correctAnswerIndex],
+          context: context,
         }),
       });
 
-      if (!res.body) return;
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split("\n");
-        for (const line of lines) {
-          if (line.startsWith("data: ") && line.length > 6) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
-                setAiExplanations((prev) => ({
-                  ...prev,
-                  [q.id]: (prev[q.id] || "") + data.candidates[0].content.parts[0].text,
-                }));
-              }
-            } catch (e) {}
-          }
-        }
+      if (!res.ok) {
+        const errData = await res.json().catch(() => null);
+        throw new Error(errData?.error || "Failed to fetch explanation");
+      }
+      
+      const data = await res.json();
+      if (data.explanation) {
+        setAiExplanations((prev) => ({
+          ...prev,
+          [q.id]: data.explanation,
+        }));
       }
     } catch (e) {
       setAiExplanations((prev) => ({
         ...prev,
-        [q.id]: (prev[q.id] || "") + "\n\n(Error: Failed to fetch explanation from AI Tutor)",
+        [q.id]: `Error: ${e instanceof Error ? e.message : String(e)}`,
       }));
     } finally {
       setAiExplaining((prev) => ({ ...prev, [q.id]: false }));

@@ -5,22 +5,49 @@ import { FileUp, FileText, UploadCloud } from "lucide-react";
 
 interface Props {
   onFiles: (files: File[]) => void;
+  onLimitExceeded?: (ignoredNames: string[]) => void;
+  onUnsupportedFiles?: (unsupportedNames: string[]) => void;
   disabled?: boolean;
 }
 
-export default function Dropzone({ onFiles, disabled }: Props) {
+export default function Dropzone({ onFiles, onLimitExceeded, onUnsupportedFiles, disabled }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
   const handleFiles = useCallback(
     (list: FileList | File[]) => {
-      const files = Array.from(list).filter((f) => {
-        const ext = f.name.toLowerCase().split(".").pop();
-        return ["pdf", "docx", "txt"].includes(ext ?? "");
+      const allFiles = Array.from(list);
+      
+      // Filter supported formats (.pdf, .docx, .txt)
+      const supported: File[] = [];
+      const unsupported: string[] = [];
+
+      allFiles.forEach((f) => {
+        const name = f.name.toLowerCase();
+        if (name.endsWith(".pdf") || name.endsWith(".docx") || name.endsWith(".txt")) {
+          supported.push(f);
+        } else {
+          unsupported.push(f.name);
+        }
       });
+
+      if (unsupported.length > 0 && onUnsupportedFiles) {
+        onUnsupportedFiles(unsupported);
+      }
+
+      let files = supported;
+      if (files.length > 5) {
+        const kept = files.slice(0, 5);
+        const ignored = files.slice(5);
+        if (onLimitExceeded && ignored.length > 0) {
+          onLimitExceeded(ignored.map(f => f.name));
+        }
+        files = kept;
+      }
+
       if (files.length > 0) onFiles(files);
     },
-    [onFiles]
+    [onFiles, onLimitExceeded, onUnsupportedFiles]
   );
 
   return (
@@ -54,7 +81,7 @@ export default function Dropzone({ onFiles, disabled }: Props) {
         ref={inputRef}
         type="file"
         multiple
-        accept=".pdf,.docx,.txt,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        accept="*"
         className="hidden"
         onChange={(e) => {
           if (e.target.files) handleFiles(e.target.files);
@@ -77,8 +104,8 @@ export default function Dropzone({ onFiles, disabled }: Props) {
           {dragging ? "Release to add files" : "Drag & drop your study materials"}
         </h3>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-          Drop multiple <strong>PDF</strong>, <strong>DOCX</strong>, or{" "}
-          <strong>TXT</strong> files. They&apos;ll be compiled into one reviewer.
+          Drop up to 5 <strong>PDF</strong>, <strong>DOCX</strong>, or{" "}
+          <strong>TXT</strong> files.
         </p>
         <span className="mt-4 inline-flex items-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-sm transition group-hover:bg-brand-dark">
           <FileText size={16} /> Browse files
