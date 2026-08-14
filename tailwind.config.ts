@@ -15,6 +15,9 @@ const config: Config = {
           light: "#2dd4bf",
         },
       },
+      fontFamily: {
+        display: ["var(--font-geist-sans)", "ui-sans-serif", "system-ui", "sans-serif"],
+      },
       animation: {
         "fade-in": "fadeIn 0.3s ease-out",
         "slide-up": "slideUp 0.3s ease-out",

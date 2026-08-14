@@ -8,6 +8,8 @@ import {
   RotateCcw,
   ChevronRight,
   CircleDot,
+  Sparkles,
+  Loader2,
 } from "lucide-react";
 import type { QuizQuestion } from "@/lib/types";
 
@@ -36,19 +38,71 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
   const [session, setSession] = useState<QuizQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [index, setIndex] = useState(0);
-  const [revealed, setRevealed] = useState(false);
+  const [checked, setChecked] = useState<Set<number>>(new Set());
+  const [aiExplanations, setAiExplanations] = useState<Record<number, string>>({});
+  const [aiExplaining, setAiExplaining] = useState<Record<number, boolean>>({});
+
+  const handleExplain = async (q: QuizQuestion, selectedIndex: number) => {
+    setAiExplaining((prev) => ({ ...prev, [q.id]: true }));
+    setAiExplanations((prev) => ({ ...prev, [q.id]: "" }));
+    try {
+      const res = await fetch("/api/explain", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          question: q.question,
+          options: q.options,
+          selected: selectedIndex === -1 ? "Skipped" : q.options[selectedIndex],
+          correct: q.options[q.correctAnswerIndex],
+        }),
+      });
+
+      if (!res.body) return;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split("\n");
+        for (const line of lines) {
+          if (line.startsWith("data: ") && line.length > 6) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.candidates?.[0]?.content?.parts?.[0]?.text) {
+                setAiExplanations((prev) => ({
+                  ...prev,
+                  [q.id]: (prev[q.id] || "") + data.candidates[0].content.parts[0].text,
+                }));
+              }
+            } catch (e) {}
+          }
+        }
+      }
+    } catch (e) {
+      setAiExplanations((prev) => ({
+        ...prev,
+        [q.id]: (prev[q.id] || "") + "\n\n(Error: Failed to fetch explanation from AI Tutor)",
+      }));
+    } finally {
+      setAiExplaining((prev) => ({ ...prev, [q.id]: false }));
+    }
+  };
 
   const start = () => {
     setSession(shuffle(bank).slice(0, Math.min(target, bank.length)));
     setAnswers({});
     setIndex(0);
-    setRevealed(false);
+    setChecked(new Set());
     setStatus("running");
   };
 
   const finish = () => {
     setStatus("finished");
   };
+
+  const current = session[index];
+  const revealed = current ? checked.has(current.id) : false;
 
   const answer = (qid: number, choice: number) => {
     if (revealed) return;
@@ -59,11 +113,10 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
   const answered = Object.keys(answers).length;
   const correct = useMemo(
     () =>
-      session.filter((q) => answers[q.id] === q.correctAnswerIndex).length,
-    [session, answers]
+      session.filter((q) => checked.has(q.id) && answers[q.id] === q.correctAnswerIndex).length,
+    [session, answers, checked]
   );
-  const current = session[index];
-  const score = status === "finished" ? correct : correct + (revealed && current && answers[current.id] === current.correctAnswerIndex ? 1 : 0);
+  const score = correct;
 
   const chooseTarget = (n: number) => {
     setTarget(n);
@@ -73,13 +126,16 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
   const maxAvailable = Math.min(70, bank.length);
   const availableTargets = (() => {
     const base = TARGET_OPTIONS.filter((n) => n <= maxAvailable);
+    if (maxAvailable > 0 && !base.includes(maxAvailable)) {
+      base.push(maxAvailable);
+    }
     return base.length > 0 ? base : maxAvailable > 0 ? [maxAvailable] : [];
   })();
   const activeTarget = Math.max(1, Math.min(target, maxAvailable));
 
   if (bank.length === 0) {
     return (
-      <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
         <CircleDot size={28} className="mx-auto mb-3 text-zinc-300" />
         <p className="text-sm text-zinc-500">
           No quiz questions were generated from the source material.
@@ -90,9 +146,9 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
 
   if (status === "setup") {
     return (
-      <div className="mx-auto max-w-md rounded-2xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="mx-auto max-w-md rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
         <Trophy size={32} className="mx-auto mb-3 text-amber-500" />
-        <h3 className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+        <h3 className="font-display text-xl font-semibold text-zinc-900 dark:text-zinc-50">
           Practice Quiz
         </h3>
         <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
@@ -150,7 +206,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
     );
     return (
       <div className="space-y-5">
-        <div className="rounded-2xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
           <Trophy size={36} className="mx-auto mb-3 text-amber-500" />
           <p className="text-4xl font-bold text-zinc-900 dark:text-zinc-50">
             {correct} / {total}
@@ -181,7 +237,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
             {missed.map((q) => (
               <div
                 key={q.id}
-                className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900"
+                className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900"
               >
                 <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
                   {q.question}
@@ -204,13 +260,13 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
 
   return (
     <div className="space-y-4">
-      <div className="sticky top-16 z-10 rounded-2xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="sticky top-16 z-10 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
         <div className="mb-2 flex items-center justify-between text-sm">
           <span className="font-semibold text-zinc-700 dark:text-zinc-300">
             Question {index + 1} of {total}
           </span>
           <span className="font-semibold text-brand">
-            Score: {score} {score !== correct && revealed ? "✓" : ""}
+            Score: {score} {revealed && answers[current.id] === current.correctAnswerIndex ? " ✓" : ""}
           </span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-zinc-100 dark:bg-zinc-800">
@@ -222,7 +278,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
       </div>
 
       {current && (
-        <div className="rounded-2xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
+        <div className="rounded-xl border border-zinc-200 bg-white p-6 dark:border-zinc-700 dark:bg-zinc-900">
           <div className="mb-4 flex items-start justify-between gap-3">
             <p className="text-base font-semibold leading-relaxed text-zinc-900 dark:text-zinc-50">
               {current.question}
@@ -312,6 +368,33 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
                   Source: {current.sourceDoc}
                 </p>
               )}
+              
+              <div className="mt-4 pt-4 border-t border-zinc-200 dark:border-zinc-700/60">
+                {!aiExplanations[current.id] && !aiExplaining[current.id] ? (
+                  <button
+                    onClick={() => handleExplain(current, answers[current.id])}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-brand transition hover:text-brand-dark"
+                  >
+                    <Sparkles size={14} /> Ask AI Tutor to explain why
+                  </button>
+                ) : (
+                  <div className="space-y-2 rounded-lg bg-white p-4 shadow-sm border border-brand/20 dark:bg-zinc-900/50">
+                    <div className="flex items-center gap-2 text-xs font-bold text-brand uppercase tracking-wider mb-2">
+                      <Sparkles size={14} /> AI Tutor
+                    </div>
+                    {aiExplanations[current.id]?.split("\n\n").map((para, i) => (
+                      <p key={i} className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+                        {para.replace(/\*\*(.*?)\*\*/g, "$1")}
+                      </p>
+                    ))}
+                    {aiExplaining[current.id] && (
+                      <div className="flex items-center gap-2 text-xs text-brand">
+                        <Loader2 size={12} className="animate-spin" /> Thinking...
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -320,7 +403,6 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
               onClick={() => {
                 if (index > 0) {
                   setIndex(index - 1);
-                  setRevealed(false);
                 }
               }}
               disabled={index === 0}
@@ -333,7 +415,6 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
                 onClick={() => {
                   if (index < total - 1) {
                     setIndex(index + 1);
-                    setRevealed(false);
                   } else {
                     finish();
                   }
@@ -348,10 +429,10 @@ export default function Quiz({ bank, questionTarget, onTargetChange }: Props) {
                   if (answers[current.id] === undefined) {
                     setAnswers((a) => ({
                       ...a,
-                      [current.id]: current.correctAnswerIndex,
+                      [current.id]: -1,
                     }));
                   }
-                  setRevealed(true);
+                  setChecked((c) => new Set(c).add(current.id));
                 }}
                 disabled={answered >= total}
                 className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 transition hover:border-brand disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"

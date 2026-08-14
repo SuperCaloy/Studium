@@ -7,12 +7,47 @@ export const MAX_BODY_BYTES = 8 * 1024 * 1024;
 export const MAX_TARGET = 70;
 export const MIN_TARGET = 1;
 
+import { Ratelimit } from "@upstash/ratelimit";
+import { Redis } from "@upstash/redis";
+
 const RATE_WINDOW_MS = 60_000;
 const RATE_MAX_PER_WINDOW = 15;
 const RATE_TRACKER = new Map<string, { count: number; resetAt: number }>();
 
-export function rateLimited(key: string): boolean {
+let upstashRatelimit: Ratelimit | null = null;
+try {
+  if (process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN) {
+    upstashRatelimit = new Ratelimit({
+      redis: Redis.fromEnv(),
+      limiter: Ratelimit.slidingWindow(RATE_MAX_PER_WINDOW, "60 s"),
+    });
+  }
+} catch (e) {
+  console.warn("Upstash setup failed", e);
+}
+
+let requestCount = 0;
+
+export async function rateLimited(key: string): Promise<boolean> {
+  if (upstashRatelimit) {
+    try {
+      const { success } = await upstashRatelimit.limit(key);
+      return !success;
+    } catch (e) {
+      // fallback on error
+    }
+  }
+
+  requestCount++;
   const now = Date.now();
+
+  // Lazy cleanup to avoid memory leaks in long-running processes
+  if (requestCount % 100 === 0) {
+    for (const [k, v] of RATE_TRACKER.entries()) {
+      if (v.resetAt <= now) RATE_TRACKER.delete(k);
+    }
+  }
+
   const entry = RATE_TRACKER.get(key);
   if (!entry || entry.resetAt <= now) {
     RATE_TRACKER.set(key, { count: 1, resetAt: now + RATE_WINDOW_MS });
@@ -53,9 +88,22 @@ export function clientIp(req: NextRequest): string {
 
 export function originAllowed(req: NextRequest): boolean {
   const origin = req.headers.get("origin");
-  if (!origin) return true;
   const host = req.headers.get("host");
+
   if (!host) return false;
+
+  if (!origin) {
+    // Stricter CSRF: if origin is missing, check referer, deny if both missing.
+    const referer = req.headers.get("referer");
+    if (!referer) return false;
+    try {
+      const r = new URL(referer);
+      return r.host === host;
+    } catch {
+      return false;
+    }
+  }
+
   try {
     const o = new URL(origin);
     return o.host === host;
@@ -105,6 +153,7 @@ export function buildProviderKeys(): {
     groq: string[] | undefined;
     openrouter: string[] | undefined;
     mistral: string[] | undefined;
+    sambanova: string[] | undefined;
   };
   modelOverrides: Partial<Record<string, string>>;
 } {
@@ -114,12 +163,14 @@ export function buildProviderKeys(): {
       groq: readSingleKey("GROQ_API_KEY"),
       openrouter: readSingleKey("OPENROUTER_API_KEY"),
       mistral: readSingleKey("MISTRAL_API_KEY"),
+      sambanova: readSingleKey("SAMBANOVA_API_KEY"),
     },
     modelOverrides: {
       gemini: readModel("GEMINI"),
       groq: readModel("GROQ"),
       openrouter: readModel("OPENROUTER"),
       mistral: readModel("MISTRAL"),
+      sambanova: readModel("SAMBANOVA"),
     },
   };
 }

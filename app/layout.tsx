@@ -3,7 +3,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import "./print.css";
 import Providers from "./Providers";
-
+import { Analytics } from "@vercel/analytics/react";
 const geistSans = Geist({
   subsets: ["latin"],
   variable: "--font-geist-sans",
@@ -16,10 +16,12 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
+// Removed Newsreader to stick to Geist sans
+
 export const metadata: Metadata = {
-  title: "Study Reviewer Generator",
+  title: "Studium | Study reviewer generator",
   description:
-    "Turn your PDF, DOCX, and TXT study materials into structured reviewers with summaries, topics, terms, flashcards, and randomized quizzes.",
+    "Turn your PDF, DOCX, and TXT study notes into a structured reviewer with summaries, topics, terms, flashcards, and a randomized quiz. Your files never leave your device.",
 };
 
 export const viewport: Viewport = {
@@ -38,6 +40,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
       <body>
         <Providers>{children}</Providers>
+        <Analytics />
       </body>
     </html>
   );

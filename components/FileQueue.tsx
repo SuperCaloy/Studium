@@ -30,15 +30,17 @@ export default function FileQueue({ items, onRemove, disabled }: Props) {
   if (items.length === 0) return null;
 
   return (
-    <div className="rounded-2xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900">
-      <h3 className="mb-3 flex items-center justify-between text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-        <span>Document Queue ({items.length})</span>
-      </h3>
-      <ul className="space-y-2">
+    <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900">
+      <div className="flex items-center justify-between border-b border-zinc-100 px-4 py-3 dark:border-zinc-800">
+        <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+          Document Queue ({items.length})
+        </h3>
+      </div>
+      <ul className="divide-y divide-zinc-100 dark:divide-zinc-800">
         {items.map((item) => (
           <li
             key={item.id}
-            className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-zinc-50 px-3 py-2.5 dark:border-zinc-700 dark:bg-zinc-800/60"
+            className="flex items-center gap-3 px-4 py-3 transition hover:bg-brand/[0.03]"
           >
             <Icon format={item.format} />
             <div className="min-w-0 flex-1">

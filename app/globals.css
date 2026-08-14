@@ -21,6 +21,21 @@ body {
   font-family: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
 }
 
+.paper-rule {
+  --paper-rule-color: rgb(15 118 110 / 0.1);
+  background-image: repeating-linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent 23px,
+    var(--paper-rule-color) 23px,
+    var(--paper-rule-color) 24px
+  );
+}
+
+.dark .paper-rule {
+  --paper-rule-color: rgb(45 212 191 / 0.08);
+}
+
 :focus-visible {
   outline: 2px solid var(--brand-accent);
   outline-offset: 2px;
@@ -34,6 +49,14 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+  
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  
+  .backface-hidden {
+    backface-visibility: hidden;
   }
 }
 

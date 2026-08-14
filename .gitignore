@@ -29,3 +29,7 @@ yarn-error.log*
 *.png
 scripts/*.png
 scripts/pdf-check.pdf
+__tests__
+
+CLAUDE.md
+AGENTS.md

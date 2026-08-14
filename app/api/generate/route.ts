@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  if (rateLimited(clientIp(req))) {
+  if (await rateLimited(clientIp(req))) {
     return NextResponse.json(
       { error: "Too many requests. Please wait a minute and try again." },
       { status: 429 }
