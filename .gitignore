@@ -15,6 +15,9 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# local agent skills/config
+.agents/
+
 # local env files
 .env
 .env.local
@@ -25,3 +28,4 @@ yarn-error.log*
 # screenshots and temp scripts
 *.png
 scripts/*.png
+scripts/pdf-check.pdf

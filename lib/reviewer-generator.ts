@@ -1,12 +1,14 @@
 import type {
   ExtractedDocument,
   ExecutiveSummary,
+  Fact,
   QuizQuestion,
   ReviewerData,
   TermDefinition,
   TopicAccordion,
   TopicDetail,
 } from "./types";
+import { REVIEWER_SCHEMA_VERSION } from "./types";
 
 const STOPWORDS = new Set(
   `a about above after again against all am an and any are aren't as at be because been being before below between both but by can't cannot could couldn't did didn't do does doesn't doing don't down during each few for from further had hadn't has hasn't have haven't having he he'd he'll he's her here here's hers herself him himself his how how's i i'd i'll i'm i've if in into is isn't it it's its itself let's me more most mustn't my myself no nor not of off on once only or other ought our ours ourselves out over own same shan't she she'd she'll she's should shouldn't so some such than that that's the their theirs them themselves then there there's these they they'd they'll they're they've this those through to too until under up very was wasn't we we'd we'll we're we've were weren't what what's when when's where where's which while who who's whom why why's with won't would wouldn't you you'd you'll you're you've your yours yourself yourselves ang mga ng sa ay ito iyon nito natin ninyo at ngunit subalit dahil kung o kaya para upang mula may wala hindi bilang naman din pa na raw daw tulad kaysa kapag nang sino ano alin ikaw ako kami sila tayo kayo si sina meron mayroon kasi baka lang po ho`.split(
@@ -60,6 +62,12 @@ const HEADING_PATTERNS = [
 
 const JUNK_HEADINGS =
   /^(references|bibliography|works cited|glossary|appendix|appendices|index|table of contents|contents|learning outcomes|learning objectives|objectives|module contents|pretest|posttest|quiz|test|assessment|answer key|acknowledg?ments|about the author|about this module|discussion|evaluation|activities?|exercises?|review questions?|study guide|syllabus|course outline|copyright|legal notice)$/i;
+
+const PERSON_NAME_LINE =
+  /^(?:prof\.?|professor|propesor|dr\.?|doctor|instructor|lecturer|faculty|adviser|advisor|mentor|teacher|tutor|dean|principal|asst\.?\s*prof\.?|assoc\.?\s*prof\.?)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,4}\s*(?:,\s*(?:[A-Z]{2,5}|RMT|RN|MD|PhD|DPT|DVM|MBA|CPA|MT|RT|BSMT|BN|BSN|PA|MA|MS)\b)?$/i;
+
+const PERSON_NAME_SEGMENT =
+  /\b(?:prof\.?|professor|propesor|dr\.?|doctor|instructor|lecturer|faculty|adviser|advisor|mentor|teacher|tutor|dean|principal)\s+[A-Z][\w'.-]*(?:\s+[A-Z][\w'.-]*){0,4}\s*(?:,\s*[A-Z]{2,5}\b)?/gi;
 
 function cleanToken(t: string): string {
   return t.replace(/[^a-zA-Z'-]/g, "").toLowerCase();
@@ -121,14 +129,164 @@ function stripNonContent(text: string): string {
   t = t
     .replace(/[ \t]+/g, " ")
     .replace(/\b(Retrieved from|First published|Printed in|All rights reserved|Copyright)\b[^.\n]*/gi, " ")
-    .replace(/PAMANTASAN NG[^.\n]*/gi, " ")
-    .replace(/MODULE CONTENTS[^.\n]*/gi, " ")
-    .replace(/LEARNING OUTCOMES[^.\n]*/gi, " ")
-    .replace(/MODYUL\s+\d+[^.\n]*/gi, " ")
     .replace(/\s+\(\s*[A-Z][A-Za-z'\-]{1,30}(?:\s*&\s*[A-Z][A-Za-z'\-]{1,30})?(?:,?\s*(?:19|20)\d{2}[a-z]?)\s*\)/gi, " ")
     .replace(/\(\s*(?:19|20)\d{2}\s*\)/g, " ");
 
-  return t.trim();
+  return stripMetadataLines(t);
+}
+
+const METADATA_LINE_PATTERNS = [
+  // Instructor / person block (colon or bare label only — never prose)
+  /^(instructor|professor|propesor|faculty|teacher|lecturer|adviser|advisor|coordinator|consultation(?:\s*hours)?|mentor)\s*:?\s*$/i,
+  /^(instructor|professor|propesor|faculty|teacher|lecturer|adviser|advisor|coordinator|consultation(?:\s*hours)?|mentor)\s*:\s*\S/i,
+  /^(prepared\s*by|submitted\s*by|noted\s*by|approved\s*by|recommended\s*by|checked\s*by|reviewed\s*by|edited\s*by|verified\s*by|validated\s*by|endorsed\s*by)\s*:?/i,
+  // Contact / scheduling
+  /^(email|e-mail|contact\s*(no\.?|number)?|mobile|cell\s*(no\.?|number)?|phone|telephone|fax|zoom|meet|skype)\s*:?\s*[\S]+/i,
+  /^(room|office|building|location|venue|address|schedule|time|days?)\s*:?\s*[\S]+/i,
+  // Course / term metadata
+  /^(course\s*code|subject\s*code|course\s*(no\.?|number)?|course\s*title|course\s*name|catalog\s*number|class\s*code|reference\s*number)\s*:?\s*[\S]+/i,
+  /^(credit\s*units?|units?|hours?\s*(per\s*wk)?|lecture\s*hours?|lab\s*hours?)\s*:?\s*\d+/i,
+  /^(semester|term|trimester|quarter|school\s*year|academic\s*year|ay|sy|s\.?\s*y\.?)\s*:?\s*\d{4}/i,
+  /^[a-z]+\s+semester[,:]?\s*(?:ay|sy|s\.?\s*y\.?)?\s*\d{4}/i,
+  /^(bachelor|master|doctor|bs|ba|ma|ms|ph\.?\s?d)\s+(of|in)\s+[\S]/i,
+  /^[A-Z]{2,8}[\s-]?\d{3,4}$/i,
+  // Institution headers (general, any school)
+  /^(pamantasan\s+ng|unibersidad\s+ng|university\s+of|universidad\s+de|college\s+of|institute\s+of|school\s+of|faculty\s+of|department\s+of|polytechnic\s+university|technological\s+university|state\s+university|academy|colegio)\b/i,
+  // Page furniture / dates / student info
+  /^page\s*\d+(\s*of\s*\d+)?$/i,
+  /^p\.?\s*\d+$/i,
+  /^\d+\s*\/\s*\d+$/i,
+  /^(date|date\s*(submitted|released|of\s*submission)|due\s*date|deadline)\s*:?\s*[\S]+/i,
+  /^\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4}$/i,
+  /^(january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{1,2},?\s+\d{4}$/i,
+  /^(student\s*(no\.?|number)?|id\s*(no\.?|number)?|matriculation\s*(no\.?|number)?|registration\s*(no\.?|number)?|s\.?\s*no\.?)\s*:?\s*[\S]+/i,
+  // Generic module boilerplate
+  /^(module\s*contents|learning\s*outcomes|learning\s*objectives|expected\s*learning\s*outcomes|course\s*objectives|module\s*\d+|lesson\s*\d+)\b/i,
+];
+
+const METADATA_INSTITUTION_TOKEN =
+  /\b(university|college|institute|academy|polytechnic|state\s+university|pamantasan|unibersidad)\b/i;
+
+function stripMetadataLines(text: string): string {
+  const lines = text.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.length > 0);
+  if (lines.length === 0) return "";
+
+  const counts = new Map<string, number>();
+  for (const l of lines) counts.set(l, (counts.get(l) ?? 0) + 1);
+
+  const isRepeatedFurniture = (l: string) =>
+    (counts.get(l) ?? 0) >= 3 &&
+    l.length >= 8 &&
+    l.length <= 120 &&
+    !/^[\s•▪◦‣·\-*—–0-9]+$/i.test(l);
+
+  const dropped: string[] = [];
+  const out: string[] = [];
+  for (let idx = 0; idx < lines.length; idx++) {
+    const line = lines[idx];
+    if (line.length > 120) {
+      out.push(line);
+      continue;
+    }
+    if (isRepeatedFurniture(line)) {
+      dropped.push(line);
+      continue;
+    }
+    const isInstHeader =
+      METADATA_INSTITUTION_TOKEN.test(line) &&
+      /^[A-Z][A-Z0-9'&.\-\s]{3,80}$/.test(line);
+    const isPersonName =
+      // Only treat a person-name line as metadata in the document header
+      // zone. Mid-document names heading real sections (e.g. "Dr. Jose
+      // Rizal", "Gen. Antonio Luna") are legitimate topics and must survive.
+      idx < 8 && PERSON_NAME_LINE.test(line);
+    if (
+      METADATA_LINE_PATTERNS.some((p) => p.test(line)) ||
+      isInstHeader ||
+      isPersonName
+    ) {
+      dropped.push(line);
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n").trim();
+}
+
+export interface ProtectedSpan {
+  formula: string;
+  context: string;
+}
+
+export function factsFromSpans(spans: ProtectedSpan[]): Fact[] {
+  return spans.map((s) => ({
+    formula: s.formula.trim().replace(/\s+/g, " ").slice(0, 200),
+    context: s.context.trim().replace(/\s+/g, " ").slice(0, 220),
+  }));
+}
+
+const FORMULA_UNIT_RE =
+  /\b\d+(?:[.,]\d+)?\s*(?:%|percent|km|cm|mm|m|kg|g|mg|µg|ml|mL|L|s|min|hr|hrs|°C|°F|K|mol|atm|Pa|J|N|W|V|A|Hz|M|kWh|cal|kcal|molecules|moles|atoms?|cells?|grams?|liters?|hours?|days?|weeks?|months?|years?|million|billion|thousand)\b/gi;
+const FORMULA_EQUATION_RE =
+  /\b[a-zA-Z][a-zA-Z0-9_]*\s*(?:=|≈|≠|>|<|≥|≤)\s*[-+]?\d+(?:\.\d+)?(?:[a-zA-Z%]*)\b/g;
+const FORMULA_CHEM_RE =
+  /\b[A-Z][a-z]?\d{0,2}(?:[A-Z][a-z]?\d{0,2}){2,}\b/g;
+
+function extractProtectedSpans(text: string): ProtectedSpan[] {
+  const spans: ProtectedSpan[] = [];
+  const seen = new Set<string>();
+  const push = (formula: string, context: string) => {
+    const f = formula.trim().replace(/\s+/g, " ");
+    if (!f || f.length < 2 || f.length > 300) return;
+    if (/\s\w{3,}\s/.test(f) && !/[=≈≠<>≤≥+\-×·÷√]/.test(f)) return;
+    const key = f.toLowerCase();
+    if (seen.has(key)) return;
+    seen.add(key);
+    spans.push({
+      formula: f,
+      context: context.trim().replace(/\s+/g, " ").slice(0, 200),
+    });
+  };
+  const around = (text: string, idx: number, len: number) =>
+    text.slice(Math.max(0, idx - 90), idx + len + 90);
+
+  for (const m of text.matchAll(/\$([^$\n]{2,200})\$/g)) {
+    push(m[1], around(text, m.index!, m[0].length));
+  }
+  for (const m of text.matchAll(/\\\[([^\]\n]{2,300})\\\]/g)) {
+    push(m[1], around(text, m.index!, m[0].length));
+  }
+  for (const m of text.matchAll(/\\\(([^)\n]{2,200})\\\)/g)) {
+    push(m[1], around(text, m.index!, m[0].length));
+  }
+
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (t.length < 2 || t.length > 300) continue;
+    const hasOperators = /(?:[^=]|^)=|→|←|√|²|³|⁴|±|×|·|÷|∑|∫|Δ|π|Ω/.test(t);
+    if (!hasOperators) continue;
+    const looksLikeEquation =
+      /\b\d+(?:[.,]\d+)?\b/.test(t) ||
+      /\\(?:\(|\[|frac|sqrt|sum|int)/.test(t) ||
+      (t.length <= 90 && /=[^=]/.test(t));
+    if (looksLikeEquation) {
+      push(t, t);
+    }
+  }
+
+  for (const m of text.matchAll(FORMULA_UNIT_RE)) {
+    push(m[0], around(text, m.index!, m[0].length));
+  }
+  for (const m of text.matchAll(FORMULA_EQUATION_RE)) {
+    push(m[0], around(text, m.index!, m[0].length));
+  }
+  for (const m of text.matchAll(FORMULA_CHEM_RE)) {
+    if (/[A-Z]/.test(m[0]) && /\d/.test(m[0])) {
+      push(m[0], around(text, m.index!, m[0].length));
+    }
+  }
+
+  return spans.slice(0, 250);
 }
 
 function isQuestionLike(s: string): boolean {
@@ -226,12 +384,16 @@ function splitSentences(text: string): string[] {
 
 function extractHeadingCandidates(lines: string[]): string[] {
   const headings: string[] = [];
-  for (const line of lines) {
-    const trimmed = line.trim();
+  for (let idx = 0; idx < lines.length; idx++) {
+    const trimmed = lines[idx].trim();
     if (trimmed.length < 3 || trimmed.length > 90) continue;
     if (/^[a-z]/.test(trimmed) && !/^\d/.test(trimmed)) continue;
     if (trimmed.split(" ").length > 12) continue;
     if (trimmed.endsWith(".")) continue;
+    // Only drop person-name lines in the document header/metadata zone
+    // (first few lines). Mid-document person names that head real sections
+    // (e.g. "Dr. Jose Rizal", "Gen. Antonio Luna") are legitimate topics.
+    if (idx < 8 && PERSON_NAME_LINE.test(trimmed)) continue;
     if (JUNK_HEADINGS.test(trimmed)) continue;
     if (HEADING_PATTERNS.some((p) => p.test(trimmed))) {
       headings.push(trimmed);
@@ -344,7 +506,8 @@ function snippetAround(text: string, index: number, before = 80, after = 160): s
 function extractTerms(
   text: string,
   sourceDocs: Map<string, string>,
-  isShort: boolean
+  isShort: boolean,
+  termCap: number
 ): TermDefinition[] {
   const sentences = splitSentences(text);
   const terms: TermDefinition[] = [];
@@ -352,7 +515,7 @@ function extractTerms(
 
   const pushTerm = (term: string, definition: string, sourceDoc?: string) => {
     if (!term || !definition) return;
-    if (terms.length >= (isShort ? 40 : 80)) return;
+    if (terms.length >= termCap) return;
     const exists = terms.some(
       (t) => stemKey(t.term) === stemKey(term)
     );
@@ -360,7 +523,7 @@ function extractTerms(
     terms.push({
       id: `term-${seq++}`,
       term,
-      definition: definition.slice(0, 240),
+      definition: tightenDefinition(term, definition).slice(0, 240),
       sourceDoc,
     });
   };
@@ -410,7 +573,7 @@ function extractTerms(
     (a, b) => termScore(b.word) - termScore(a.word) || b.count - a.count
   );
   for (const fw of freq) {
-    if (terms.length >= (isShort ? 40 : 80)) break;
+    if (terms.length >= termCap) break;
     const w = fw.word.toLowerCase();
     const key = stemKey(w);
     if (candidateTerms.has(key)) continue;
@@ -423,7 +586,7 @@ function extractTerms(
   }
 
   for (const [docName, docText] of sourceDocs.entries()) {
-    if (terms.length >= (isShort ? 40 : 80)) break;
+    if (terms.length >= termCap) break;
     const docFreq = computeFrequencies(docText).filter(
       (f) =>
         (isShort ? f.word.length >= 3 : f.word.length > 4) &&
@@ -434,7 +597,7 @@ function extractTerms(
       (a, b) => termScore(b.word) - termScore(a.word) || b.count - a.count
     );
     for (const fw of docFreq) {
-      if (terms.length >= (isShort ? 40 : 80)) break;
+      if (terms.length >= termCap) break;
       const w = fw.word.toLowerCase();
       const key = stemKey(w);
       if (candidateTerms.has(key)) continue;
@@ -445,7 +608,7 @@ function extractTerms(
     }
   }
 
-  return uniqueBy(terms, (t) => stemKey(t.term)).slice(0, isShort ? 40 : 80);
+  return uniqueBy(terms, (t) => stemKey(t.term)).slice(0, termCap);
 }
 
 function allSentences(text: string, sourceDocs: Map<string, string>): string[] {
@@ -471,8 +634,13 @@ function sectionsFromHeadings(
 ): { title: string; body: string }[] {
   const idxs: { h: string; i: number }[] = [];
   for (const h of headings) {
-    const i = docText.indexOf(h);
-    if (i !== -1) idxs.push({ h, i });
+    const re = new RegExp(
+      `(?:^|\\n)\\s*${escapeRegExp(h)}\\s*(?:\\n|$)`
+    );
+    const m = docText.match(re);
+    if (m && m.index !== undefined) {
+      idxs.push({ h, i: m.index + m[0].indexOf(h) });
+    }
   }
   idxs.sort((a, b) => a.i - b.i);
   const out: { title: string; body: string }[] = [];
@@ -487,6 +655,20 @@ function sectionsFromHeadings(
   return out;
 }
 
+function deriveTitle(body: string): string {
+  const first = body.split(/\s*[.!?]\s+/)[0] ?? body;
+  const defVerb = first.match(
+    /^(.{2,60}?)\s+(?:is|are|was|were|refers?\s+to|means|involves?|describes?|focuses?\s+on|occurs|happens|takes\s+place|plays?|functions?)\b/i
+  );
+  if (defVerb) {
+    const t = defVerb[1].replace(/[;:]\s*$/, "").trim();
+    if (t.length >= 2 && t.length <= 60) return t.charAt(0).toUpperCase() + t.slice(1);
+  }
+  const cap = first.match(/^([A-Z][A-Za-z'-]*(?:\s+[A-Za-z'-]+){0,5})/);
+  if (cap && cap[1].length >= 3) return cap[1];
+  return first.split(/\s+/).slice(0, 4).join(" ") || "Section";
+}
+
 function chunkText(docText: string): { title: string; body: string }[] {
   const sentences = splitSentences(docText);
   if (sentences.length === 0) return [];
@@ -499,8 +681,9 @@ function chunkText(docText: string): { title: string; body: string }[] {
       .map((w) => w.replace(/[^A-Za-z]/g, ""))
       .filter((w) => w.length > 4 && !STOPWORDS.has(w.toLowerCase()) && !JUNK_TERMS.has(w.toLowerCase()));
     const top =
-      words.find((w) => /^[A-Z]/.test(w)) ??
-      words.sort((a, b) => b.length - a.length)[0];
+      deriveTitle(body) ||
+      (words.find((w) => /^[A-Z]/.test(w)) ??
+        words.sort((a, b) => b.length - a.length)[0]);
     chunks.push({
       title: top ? capTerm(top) : `Section ${i / perChunk + 1}`,
       body,
@@ -517,20 +700,51 @@ function buildTopic(
   const sentences = splitSentences(section.body);
   if (sentences.length === 0) return null;
   const nonQ = sentences.filter((s) => !isQuestionLike(s));
-  const points = unique(
-    nonQ.filter((s) => !DEFINITION_PATTERNS.some((p) => p.test(s)))
-  )
-    .slice(0, 6)
-    .map((s) => s.slice(0, 220));
-
   const secLower = section.body.toLowerCase();
   const sectionTerms = terms
     .filter((t) => secLower.includes(t.term.toLowerCase()))
-    .slice(0, 3);
+    .slice(0, 6);
+  const secFreq = computeFrequencies(section.body);
+  const freqMap = new Map(secFreq.map((f) => [f.word, f.count]));
+  const secTermsLower = sectionTerms.map((t) => t.term.toLowerCase());
+  const isFact = (s: string) =>
+    /\b\d+(?:[.,]\d+)?\s*(?:%|percent|km|cm|mm|m|kg|g|mg|ml|mL|L|s|min|hr|hrs|°C|°F|K|mol|moles|atoms?|cells?|grams?|liters?|hours?|days?|weeks?|months?|years?|million|billion|thousand)\b/i.test(
+      s
+    ) ||
+    /[=≈≠<>≤≥+×·÷√]|\b(?:19|20)\d{2}\b/.test(s);
+  const scored = unique(
+    nonQ.filter((s) => !DEFINITION_PATTERNS.some((p) => p.test(s)))
+  )
+    .map((s, i) => {
+      const toks = tokenize(s).filter((t) => !STOPWORDS.has(t));
+      const density =
+        toks.reduce((sum, t) => sum + (freqMap.get(t) ?? 0), 0) /
+        (toks.length || 1);
+      const lower = s.toLowerCase();
+      const hasTerm = secTermsLower.some(
+        (t) => t.length > 3 && lower.includes(t)
+      );
+      const score =
+        density * 2 +
+        (hasTerm ? 2.5 : 0) +
+        (isFact(s) ? 3 : 0) +
+        (i < 3 ? 1.5 : 0) -
+        (i > 8 ? 1 : 0);
+      return { s, score };
+    })
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 8)
+    .map((x) => x.s.slice(0, 220))
+    .sort(
+      (a, b) =>
+        section.body.indexOf(a) - section.body.indexOf(b) ||
+        a.localeCompare(b)
+    );
+  const points = scored;
 
   const details: TopicDetail[] = [];
   for (const st of sectionTerms) {
-    if (details.length >= 3) break;
+    if (details.length >= 6) break;
     details.push({
       id: `det-${st.id}`,
       heading: st.term,
@@ -541,7 +755,7 @@ function buildTopic(
     details.push({
       id: `det-${section.title}-key`,
       heading: "Key Points",
-      points: points.slice(0, 4),
+      points: points.slice(0, 8),
     });
   }
   if (details.length === 0) {
@@ -556,7 +770,7 @@ function buildTopic(
     id: `topic-${section.title}`,
     title: section.title,
     summary: points[0] ?? sentences[0]?.slice(0, 200) ?? section.body.slice(0, 200),
-    details: uniqueBy(details, (d) => d.heading).slice(0, 4),
+    details: uniqueBy(details, (d) => d.heading).slice(0, 8),
   };
 }
 
@@ -581,7 +795,7 @@ function buildFallbackTopic(terms: TermDefinition[]): TopicAccordion {
 function buildTopicsForDocs(
   sourceDocs: Map<string, string>,
   terms: TermDefinition[],
-  isShort: boolean
+  topicCap: number
 ): TopicAccordion[] {
   const topics: TopicAccordion[] = [];
   const usedTitles = new Set<string>();
@@ -589,15 +803,15 @@ function buildTopicsForDocs(
     name.replace(/\.[^.]+$/, "").replace(/[_-]+/g, " ").trim() || name;
 
   for (const [name, docText] of sourceDocs.entries()) {
-    if (topics.length >= 20) break;
+    if (topics.length >= topicCap) break;
     const headings = extractHeadingCandidates(docText.split(/\n+/));
     const sections =
       headings.length >= 2
         ? sectionsFromHeadings(docText, headings)
         : chunkText(docText);
     for (const sec of sections) {
-      if (topics.length >= 20) break;
-      const topic = buildTopic(sec, terms, isShort);
+      if (topics.length >= topicCap) break;
+      const topic = buildTopic(sec, terms, topicCap < 40);
       if (!topic) continue;
       let title = topic.title;
       if (usedTitles.has(title.toLowerCase())) {
@@ -615,7 +829,7 @@ function buildTopicsForDocs(
   if (topics.length === 0) {
     topics.push(buildFallbackTopic(terms));
   }
-  return topics.slice(0, 20);
+  return topics.slice(0, topicCap);
 }
 
 function similarity(a: string, b: string): number {
@@ -642,6 +856,7 @@ function negateStatement(s: string): string | null {
   );
   if (action && action.index !== undefined) {
     const w = action[0];
+    const after = s.slice(action.index + w.length);
     const base = /ies$/i.test(w)
       ? w.slice(0, -3) + "y"
       : /es$/i.test(w)
@@ -649,9 +864,30 @@ function negateStatement(s: string): string | null {
         : /s$/i.test(w)
           ? w.slice(0, -1)
           : w;
-    return s.slice(0, action.index) + `does not ${base}` + s.slice(action.index + w.length);
+    if (/^use$/i.test(base) && /\bof\b/i.test(after)) return null;
+    return s.slice(0, action.index) + `does not ${base.toLowerCase()}` + after;
   }
   return null;
+}
+
+function cleanStatement(s: string, minLen: number): string | null {
+  if (/\n|\r/.test(s)) return null;
+  let x = s
+    .replace(/^\s*[•●◦▪]\s*/, "")
+    .replace(/^\s*[-–—]\s*/, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  if (!x) return null;
+  if (x.length < minLen || x.length > 240) return null;
+  if (/[•●◦]|\|/.test(x)) return null;
+  if (/✓|✗/.test(x)) return null;
+  if (/^\s*\d+[\.\)]\s*/.test(x)) return null;
+  if (/\s\d+[\.\)]\s*$/.test(x)) return null;
+  if (/\(\s*\d+\s*(?:pts?|points?|marks?)\)/i.test(x)) return null;
+  if (/^(true|false|yes|no)\b/i.test(x)) return null;
+  if (/^\s*(chapter|section|lesson|unit|module)\s+\d/i.test(x)) return null;
+  if (/^[\s\-–—+*=#@>]/.test(x)) return null;
+  return x;
 }
 
 function extractExampleLists(
@@ -676,7 +912,7 @@ function extractNumericValues(text: string): string[] {
     /\b(?:\d[\d,]*(?:\.\d+)?\s*(?:%|percent|km|cm|m|mm|kg|g|mg|ml|s|min|hr|h|days?|weeks?|months?|years?|°C|°F|degrees?|million|billion|thousand)|(?:19|20)\d{2})\b/gi;
   return unique(
     Array.from(text.matchAll(re), (m) => m[0].trim())
-  ).slice(0, 40);
+  ).slice(0, 60);
 }
 
 const PHRASE_DEFINE = [
@@ -693,7 +929,7 @@ const PHRASE_STATEMENT = [
   "Which statement is supported by the material?",
 ];
 
-function buildQuiz(
+export function buildQuiz(
   terms: TermDefinition[],
   topics: TopicAccordion[],
   text: string,
@@ -728,13 +964,19 @@ function buildQuiz(
   const tfCount = () => questions.filter((q) => q.type === "tf").length;
   const mcCount = () => questions.filter((q) => q.type === "mcq").length;
 
-  const tfStatements = unique(
-    [
-      ...topicPoints,
-      ...cleanTerms.map((t) => t.definition),
-      ...splitSentences(text).filter((s) => !isQuestionLike(s)),
-    ].filter((s) => s && s.length > minLen && s.length < 280)
+  const tfPrimary = unique(
+    [...topicPoints, ...cleanTerms.map((t) => t.definition)]
+      .filter((s) => s && !isQuestionLike(s))
+      .map((s) => cleanStatement(s, minLen))
+      .filter((s): s is string => !!s)
   );
+  const tfRaw = unique(
+    splitSentences(text)
+      .filter((s) => !isQuestionLike(s))
+      .map((s) => cleanStatement(s, 60))
+      .filter((s): s is string => !!s)
+  );
+  const tfStatements = [...shuffle(tfPrimary), ...shuffle(tfRaw)];
   for (const stmt of shuffle(tfStatements)) {
     if (tfCount() >= tfTarget || questions.length >= questionTarget) break;
     const lower = stmt.toLowerCase();
@@ -865,6 +1107,8 @@ function buildQuiz(
       t.summary,
       ...t.details.flatMap((d) => d.points),
     ])
+      .map((p) => cleanStatement(p, minLen + 10))
+      .filter((p): p is string => !!p)
   );
   const allPoints = unique(byTopic.flat());
 
@@ -1011,6 +1255,23 @@ function escapeRegExp(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+function tightenDefinition(term: string, def: string): string {
+  const re = new RegExp(`\\b${escapeRegExp(term)}\\b`, "i");
+  const m = def.match(re);
+  if (!m || m.index === undefined) return def;
+  const before = def.slice(0, m.index);
+  const boundary = Math.max(
+    before.lastIndexOf(". "),
+    before.lastIndexOf("; "),
+    before.lastIndexOf(": ")
+  );
+  const from = boundary === -1 ? Math.max(0, m.index - 70) : boundary + 2;
+  const after = def.slice(m.index);
+  const endRel = after.indexOf(".", m[0].length);
+  const end = endRel === -1 ? def.length : m.index + endRel + 1;
+  return def.slice(from, end).trim();
+}
+
 function pickOverview(sentences: string[], freq: FrequencyEntry[]): string {
   const freqMap = new Map(freq.map((f) => [f.word, f.count]));
   const scored = sentences
@@ -1046,11 +1307,19 @@ export function prepareDraft(docs: ExtractedDocument[]): {
   cleanedDocs: ExtractedDocument[];
   text: string;
   draft: SourceDraft;
+  protectedFacts: string[];
+  protectedSpans: ProtectedSpan[];
 } {
   const cleanedDocs = docs.map((d) => ({ ...d, text: stripNonContent(d.text) }));
   const text = cleanedDocs.map((d) => d.text).join("\n\n");
   const sourceDocs = new Map(cleanedDocs.map((d) => [d.name, d.text]));
-  const isShort = text.split(/\s+/).length < 800;
+  const wordCount = text.split(/\s+/).length;
+  const isShort = wordCount < 800;
+  const termCap = Math.max(30, Math.min(isShort ? 200 : 300, Math.round(wordCount / 12)));
+  const topicCap = Math.max(8, Math.min(60, Math.round(wordCount / 100)));
+
+  const protectedSpans = extractProtectedSpans(text);
+  const protectedFacts = protectedSpans.map((s) => s.formula);
 
   const sentences = splitSentences(text);
   const freq = computeFrequencies(text);
@@ -1058,51 +1327,81 @@ export function prepareDraft(docs: ExtractedDocument[]): {
   const lines = normalizeText(text).split("\n");
   const headings = extractHeadingCandidates(lines);
 
-  const terms = extractTerms(text, sourceDocs, isShort);
-  const topics = buildTopicsForDocs(sourceDocs, terms, isShort);
+  const terms = extractTerms(text, sourceDocs, isShort, termCap);
+  const topics = buildTopicsForDocs(sourceDocs, terms, topicCap);
 
-  const takeawayCandidates = sentences
-    .filter((s) =>
-      /(important|crucial|key|main|primary|core|essential|major|significant|fundamental)/i.test(
-        s
-      )
-    )
-    .concat(
-      sentences
-        .filter((s) => s.length > 80)
-        .sort((a, b) => {
-          const key = (s: string) =>
-            tokenize(s).filter((w) => !STOPWORDS.has(w)).length;
-          return key(b) - key(a);
-        })
-    );
-
+  const freqMap = new Map(freq.map((f) => [f.word, f.count]));
   const BOILERPLATE = /^(introduction|conclusion|summary|overview|glossary|references|bibliography|appendix|objectives|abstract|acknowledg?ments?|about|background|review|quiz|learning\s+objectives|learning\s+outcomes|key\s+terms|key\s+concepts|module\s+contents|contents|pretest|posttest|discussion|evaluation|activity|activities|exercise|exercises)$/i;
+  const takeawayCandidates = unique(
+    sentences
+      .filter(
+        (s) =>
+          !isQuestionLike(s) &&
+          !PERSON_NAME_LINE.test(s.trim()) &&
+          !BOILERPLATE.test(s.trim()) &&
+          s.length > 40 &&
+          s.length < 260
+      )
+      .map((s, i) => {
+        const lower = s.toLowerCase();
+        const imp =
+          /(important|crucial|key|main|primary|core|essential|major|significant|fundamental|according to|is the process|is defined|refers to|plays? a|responsible for)/i.test(
+            s
+          )
+            ? 3
+            : 0;
+        const hasFact =
+          /\b\d+(?:[.,]\d+)?\s*(?:%|percent|km|cm|mm|m|kg|g|mg|ml|mL|L|s|min|hr|hrs|°C|°F|mol|million|billion|thousand)\b/i.test(
+            s
+          ) || /[=≈≠<>≤≥]/.test(s)
+            ? 2
+            : 0;
+        const toks = tokenize(s).filter((t) => !STOPWORDS.has(t));
+        const density =
+          toks.reduce((sum, t) => sum + (freqMap.get(t) ?? 0), 0) /
+          (toks.length || 1);
+        const lead = Math.max(0, 1 - i * 0.02);
+        return { s, score: (imp + hasFact + density * 2) * lead };
+      })
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.s)
+      .filter(
+        (s, idx, arr) =>
+          !arr.slice(0, idx).some((p) => similarity(p, s) > 0.55)
+      )
+  );
+
+  const titleCandidates = headings.filter((h) => !PERSON_NAME_LINE.test(h));
+  const personCandidates = headings.filter((h) => PERSON_NAME_LINE.test(h));
   const numbered =
-    headings.find((h) => !/^(chapter|section|lesson|module|unit|part)\s+\d/i.test(h)) ??
-    headings[0];
+    titleCandidates.find((h) => !/^(chapter|section|lesson|module|unit|part)\s+\d/i.test(h)) ??
+    titleCandidates[0];
   const cleanHeading = (h: string) =>
     h.replace(/[:.\-]\s*$/, "").replace(/[_-]+/g, " ").trim();
   const cleanFileName = (name: string) => {
     const withoutExt = name.replace(/\.[^.]+$/, "").trim();
     const stripped = withoutExt
       .replace(/\((20\d{2})\d*-\d{4,6}\)/g, "")
+      .replace(PERSON_NAME_SEGMENT, " ")
       .replace(/[_-]+/g, " ")
       .replace(/\s{2,}/g, " ")
+      .replace(/^[\s\-–—:;,.]+|[\s\-–—:;,]+$/g, "")
       .trim();
     return stripped || withoutExt;
   };
   const title =
     numbered && !BOILERPLATE.test(numbered)
       ? cleanHeading(numbered)
-      : headings.find((h) => !BOILERPLATE.test(h))?.length
-        ? cleanHeading(headings.find((h) => !BOILERPLATE.test(h))!)
+      : titleCandidates.find((h) => !BOILERPLATE.test(h))?.length
+        ? cleanHeading(titleCandidates.find((h) => !BOILERPLATE.test(h))!)
         : numbered?.length
           ? cleanHeading(numbered)
-          : docs
-              .map((d) => cleanFileName(d.name))
-              .join(", ")
-              .slice(0, 80) || "Study Materials";
+          : personCandidates[0]?.length
+            ? cleanHeading(personCandidates[0])
+            : docs
+                .map((d) => cleanFileName(d.name))
+                .join(", ")
+                .slice(0, 80) || "Study Materials";
 
   return {
     cleanedDocs,
@@ -1117,6 +1416,8 @@ export function prepareDraft(docs: ExtractedDocument[]): {
       topics,
       terms,
     },
+    protectedFacts,
+    protectedSpans,
   };
 }
 
@@ -1128,16 +1429,58 @@ export function buildOfflineQuiz(
   return buildQuiz(draft.terms, draft.topics, text, questionTarget);
 }
 
+export function normalizeIds(
+  topics: TopicAccordion[],
+  terms: TermDefinition[]
+): { topics: TopicAccordion[]; terms: TermDefinition[] } {
+  let seq = 0;
+  const withIds = topics.map((t, ti) => {
+    const topicId = typeof t.id === "string" && t.id ? t.id : `topic-${ti}`;
+    const details = (t.details ?? []).map((d, di) => ({
+      ...d,
+      id:
+        typeof d.id === "string" && d.id ? d.id : `${topicId}-detail-${di}`,
+    }));
+    return { ...t, id: topicId, details };
+  });
+  const used = new Set<string>();
+  const normalizedTerms = terms.map((t) => {
+    let id = typeof t.id === "string" && t.id ? t.id : `term-${seq++}`;
+    if (used.has(id)) id = `${id}-${++seq}`;
+    used.add(id);
+    return { ...t, id };
+  });
+  return { topics: withIds, terms: normalizedTerms };
+}
+
+export function buildQuizFromReviewer(
+  topics: TopicAccordion[],
+  terms: TermDefinition[],
+  keyTakeaways: string[],
+  sourceText: string,
+  questionTarget: number
+): QuizQuestion[] {
+  const pool = sourceText ? [sourceText] : [];
+  const text = pool.join("\n\n");
+  const withTakeaways = [...terms, ...keyTakeaways.map((t) => ({
+    id: `tk-${t.slice(0, 8)}`,
+    term: "",
+    definition: t,
+  } as TermDefinition))];
+  return buildQuiz(withTakeaways, topics, text, questionTarget);
+}
+
 export function buildOfflineReviewer(
   docs: ExtractedDocument[],
   questionTarget: number
 ): ReviewerData {
-  const { text, draft } = prepareDraft(docs);
+  const { text, draft, protectedSpans } = prepareDraft(docs);
 
   const totalWords = docs.reduce((s, d) => s + d.wordCount, 0);
   const totalPages = docs.reduce((s, d) => s + (d.pageCount ?? 0), 0);
 
   const quizBank = buildQuiz(draft.terms, draft.topics, text, questionTarget);
+  const { topics, terms } = normalizeIds(draft.topics, draft.terms);
 
   const summary: ExecutiveSummary = {
     title: draft.title,
@@ -1154,9 +1497,11 @@ export function buildOfflineReviewer(
     createdAt: Date.now(),
     updatedAt: Date.now(),
     summary,
-    topics: draft.topics,
-    terms: draft.terms,
+    topics,
+    terms,
+    facts: factsFromSpans(protectedSpans),
     quizBank,
     engine: "offline",
+    version: REVIEWER_SCHEMA_VERSION,
   };
 }

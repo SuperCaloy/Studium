@@ -29,12 +29,14 @@ export interface TermDefinition {
   term: string;
   definition: string;
   sourceDoc?: string;
+  enriched?: boolean;
 }
 
 export interface TopicDetail {
   id: string;
   heading: string;
   points: string[];
+  enriched?: boolean;
 }
 
 export interface TopicAccordion {
@@ -65,6 +67,13 @@ export interface ExecutiveSummary {
   targetStudyMinutes: number;
 }
 
+export interface Fact {
+  formula: string;
+  context: string;
+}
+
+export const REVIEWER_SCHEMA_VERSION = 2;
+
 export interface ReviewerData {
   id: string;
   createdAt: number;
@@ -72,8 +81,10 @@ export interface ReviewerData {
   summary: ExecutiveSummary;
   topics: TopicAccordion[];
   terms: TermDefinition[];
+  facts: Fact[];
   quizBank: QuizQuestion[];
   engine: "ai" | "offline";
+  version?: number;
 }
 
 export type GenerationStep =

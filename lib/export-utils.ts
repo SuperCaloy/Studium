@@ -51,6 +51,14 @@ export function reviewerToMarkdown(reviewer: ReviewerData): string {
   }
   lines.push("");
 
+  lines.push("## Key Facts & Formulas");
+  lines.push("");
+  for (const fact of reviewer.facts ?? []) {
+    lines.push(`- \`${fact.formula}\``);
+    if (fact.context) lines.push(`  - ${fact.context}`);
+  }
+  lines.push("");
+
   lines.push("## Practice Quiz");
   lines.push("");
   quizBank.forEach((q, i) => {

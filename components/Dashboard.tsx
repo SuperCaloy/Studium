@@ -1,33 +1,34 @@
 "use client";
 
 import { useState } from "react";
-import { LayoutDashboard, FolderOpen, BookMarked, Layers, ListChecks } from "lucide-react";
+import { LayoutDashboard, FolderOpen, BookMarked, Layers, ListChecks, FlaskConical } from "lucide-react";
 import type { ReviewerData } from "@/lib/types";
 import SummaryPanel from "./SummaryPanel";
 import TopicsPanel from "./TopicsPanel";
 import TermsTable from "./TermsTable";
 import Flashcards from "./Flashcards";
 import Quiz from "./Quiz";
+import FactsPanel from "./FactsPanel";
 import ExportBar from "./ExportBar";
 
-type Tab = "summary" | "topics" | "terms" | "flashcards" | "quiz";
+type Tab = "summary" | "topics" | "terms" | "facts" | "flashcards" | "quiz";
 
 interface Props {
   reviewer: ReviewerData;
   questionTarget: number;
   onTargetChange: (n: number) => void;
-  onRegenerate: (n: number) => void;
 }
 
 const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard; badge?: (r: ReviewerData) => number }[] = [
   { key: "summary", label: "Summary", icon: LayoutDashboard },
   { key: "topics", label: "Topics", icon: FolderOpen, badge: (r) => r.topics.length },
   { key: "terms", label: "Terms", icon: BookMarked, badge: (r) => r.terms.length },
+  { key: "facts", label: "Key Facts", icon: FlaskConical, badge: (r) => (r.facts ?? []).length },
   { key: "flashcards", label: "Flashcards", icon: Layers, badge: (r) => r.terms.length },
   { key: "quiz", label: "Quiz", icon: ListChecks, badge: (r) => r.quizBank.length },
 ];
 
-export default function Dashboard({ reviewer, questionTarget, onTargetChange, onRegenerate }: Props) {
+export default function Dashboard({ reviewer, questionTarget, onTargetChange }: Props) {
   const [tab, setTab] = useState<Tab>("summary");
 
   return (
@@ -43,7 +44,7 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange, on
             <button
               key={t.key}
               onClick={() => setTab(t.key)}
-              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition ${
+              className={`flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium transition ${
                 active
                   ? "bg-brand text-white shadow-sm"
                   : "border border-zinc-200 bg-white text-zinc-600 hover:border-brand hover:text-brand dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
@@ -71,13 +72,13 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange, on
         {tab === "summary" && <SummaryPanel reviewer={reviewer} />}
         {tab === "topics" && <TopicsPanel topics={reviewer.topics} />}
         {tab === "terms" && <TermsTable terms={reviewer.terms} />}
+        {tab === "facts" && <FactsPanel facts={reviewer.facts ?? []} />}
         {tab === "flashcards" && <Flashcards terms={reviewer.terms} />}
         {tab === "quiz" && (
           <Quiz
             bank={reviewer.quizBank}
             questionTarget={questionTarget}
             onTargetChange={onTargetChange}
-            onRegenerate={onRegenerate}
           />
         )}
       </div>

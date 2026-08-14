@@ -10,9 +10,9 @@ const config: Config = {
     extend: {
       colors: {
         brand: {
-          DEFAULT: "#6366f1",
-          dark: "#4f46e5",
-          light: "#818cf8",
+          DEFAULT: "#0f766e",
+          dark: "#115e59",
+          light: "#2dd4bf",
         },
       },
       animation: {

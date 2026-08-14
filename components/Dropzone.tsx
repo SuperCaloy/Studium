@@ -71,7 +71,7 @@ export default function Dropzone({ onFiles, disabled }: Props) {
         Drop multiple <strong>PDF</strong>, <strong>DOCX</strong>, or{" "}
         <strong>TXT</strong> files. They&apos;ll be compiled into one reviewer.
       </p>
-      <span className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2 text-sm font-medium text-white shadow-sm transition group-hover:bg-brand-dark">
+      <span className="mt-4 inline-flex items-center gap-2 rounded-xl bg-brand px-4 py-2.5 text-sm font-medium text-white shadow-sm transition group-hover:bg-brand-dark">
         <FileText size={16} /> Browse files
       </span>
       <p className="mt-3 text-xs text-zinc-400 dark:text-zinc-500">
