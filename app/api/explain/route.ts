@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { buildProviderKeys, rateLimited, clientIp, originAllowed } from "@/lib/api-helpers";
+import { buildProviderKeys, rateLimited, clientIp, originAllowed, MAX_BODY_BYTES } from "@/lib/api-helpers";
 import { PROVIDERS } from "@/lib/ai-generator";
 
 export const runtime = "nodejs";
@@ -13,6 +13,11 @@ export async function POST(req: NextRequest) {
 
   if (await rateLimited(clientIp(req))) {
     return NextResponse.json({ error: "Too many requests" }, { status: 429 });
+  }
+
+  const contentLength = Number(req.headers.get("content-length") ?? 0);
+  if (contentLength > MAX_BODY_BYTES) {
+    return NextResponse.json({ error: "Request too large." }, { status: 413 });
   }
 
   const { keys, modelOverrides } = buildProviderKeys();
@@ -43,18 +48,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
   }
 
-  const prompt = `You are an expert tutor. A student just answered a multiple choice question.
-Question: ${question}
+  const safeContext = context ? context.slice(0, 1500) : "";
+  const prompt = `Question: ${question}
 Options: ${options.map((o: string, i: number) => `${i + 1}. ${o}`).join('\n')}
-The correct answer is: ${correct}
-The student selected: ${selected}
+Correct: ${correct}
+Selected: ${selected}
 
-${context ? `Use the following study material context to explain the answer:\n${context}\n\n` : ''}Explain concisely why the correct answer is right, and if the student selected wrong, briefly explain why their choice is incorrect. Keep it extremely brief (maximum 80 words). Use markdown formatting. Do not output JSON.`;
+${safeContext ? `Context:\n${safeContext}\n\n` : ''}You are a professional academic tutor. Explain precisely why the Correct answer is right based on the context. Focus ONLY on explaining the correct answer; do NOT mention or explain the user's selected wrong answer. 
+CRITICAL RULES:
+1. DO NOT start your response with "The correct answer is", "Option X is", or any similar robotic preamble.
+2. Jump straight into the explanation (e.g. start immediately with the concept name like "Acceptance testing verifies...").
+3. Do NOT use em-dashes (—).
+4. Keep the explanation extremely concise, direct, and under 80 words. Use standard markdown. No JSON.`;
 
-  // Determine provider order (Gemini first, then others)
+  // Determine provider order (Groq/Mistral first for sub-second generation speed)
+  const fastIds = ["groq", "mistral", "sambanova", "openrouter"];
   const order = [
-    ...PROVIDERS.filter(p => p.id === "gemini"),
-    ...PROVIDERS.filter(p => p.id !== "gemini")
+    ...PROVIDERS.filter(p => fastIds.includes(p.id)),
+    ...PROVIDERS.filter(p => !fastIds.includes(p.id))
   ];
 
   let lastError = "No valid API keys found.";
@@ -82,7 +93,10 @@ ${context ? `Use the following study material context to explain the answer:\n${
         });
         if (!res.ok) throw new Error(await res.text().catch(() => "Gemini API Error"));
         const data = await res.json();
-        text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (!text) {
+          throw new Error(`Empty response. Reason: ${data.candidates?.[0]?.finishReason || 'Unknown'}`);
+        }
       } else {
         const res = await fetch(provider.baseUrl!, {
           method: "POST",
@@ -99,18 +113,20 @@ ${context ? `Use the following study material context to explain the answer:\n${
         });
         if (!res.ok) throw new Error(await res.text().catch(() => "OpenAI Compat Error"));
         const data = await res.json();
-        text = data.choices?.[0]?.message?.content ?? "";
+        text = data.choices?.[0]?.message?.content;
+        if (!text) {
+          throw new Error(`Empty response. Reason: ${data.choices?.[0]?.finish_reason || 'Unknown'}`);
+        }
       }
 
       if (text) {
         return NextResponse.json({ explanation: text });
       }
     } catch (err) {
-      console.error(`[Explain API] ${provider.name} failed:`, err instanceof Error ? err.message : err);
-      lastError = err instanceof Error ? err.message : String(err);
+      console.error(`[Explain API] ${provider.id} failed:`, err instanceof Error ? err.message : err);
       continue;
     }
   }
 
-  return NextResponse.json({ error: "Failed to fetch explanation from all available AI providers.", details: lastError }, { status: 500 });
+  return NextResponse.json({ error: "Failed to fetch explanation from all available AI providers. Please try again later." }, { status: 502 });
 }

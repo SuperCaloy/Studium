@@ -61,6 +61,60 @@ export async function POST(req: NextRequest) {
   const totalWords = docs.reduce((s, d) => s + d.wordCount, 0);
   const sourceText = docs.map((d) => d.text).join("\n\n");
   const questionTarget = 70;
+  const isStream = req.nextUrl.searchParams.get("stream") === "true";
+
+  if (isStream) {
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const send = (event: string, data: any) => {
+          controller.enqueue(encoder.encode(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`));
+        };
+
+        try {
+          if (!hasAnyKey) throw new Error("No AI provider keys configured.");
+          
+          const { cleanedDocs, draft, protectedFacts, protectedSpans } = prepareDraft(docs);
+          const result = await generateCards(
+            cleanedDocs,
+            keys,
+            modelOverrides,
+            draft,
+            protectedFacts,
+            factsFromSpans(protectedSpans),
+            (event, data) => send(event, data) // stream topics and terms as they finish
+          );
+          
+          const cards = result.reviewer;
+          const quiz = buildQuizFromReviewer(
+            cards.topics,
+            cards.terms,
+            cards.summary.keyTakeaways,
+            sourceText,
+            questionTarget
+          );
+          
+          const reviewer = { ...cards, quizBank: quiz };
+          send("quiz", quiz);
+          send("done", reviewer);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : "unknown error";
+          send("error", { message: msg });
+          // Fallback handled by client
+        } finally {
+          controller.close();
+        }
+      }
+    });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+      },
+    });
+  }
 
   let reviewer: ReviewerData | null = null;
   let fallback = false;

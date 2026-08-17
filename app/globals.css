@@ -77,3 +77,12 @@ pre {
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
+
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+
+.backface-hidden {
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}

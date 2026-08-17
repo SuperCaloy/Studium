@@ -1,14 +1,3 @@
-/* Study Reviewer print stylesheet
-   Plain CSS (no Tailwind) so the same file powers both the browser-print
-   path (bundled via layout.tsx) and the /api/export-pdf route (read from
-   disk and inlined). The API route renders with print media, matching the
-   browser's Print dialog.
-
-   Design system: restrained academic reviewer. One accent (teal), used only
-   on section rules and table headers. Georgia serif headings, Helvetica
-   body. Generous margins. Running header + footer via @page margin boxes
-   (supported in Chromium >= 131; requires Chromium 1217+). */
-
 .sr-panel {
   display: none;
 }

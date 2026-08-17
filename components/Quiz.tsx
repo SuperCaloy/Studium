@@ -345,14 +345,14 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
                 <p className="font-medium text-red-600 dark:text-red-400">
                   Not quite. The correct answer is{" "}
                   <span className="font-semibold">
-                    {String.fromCharCode(65 + current.correctAnswerIndex)}.
+                    {String.fromCharCode(65 + current.correctAnswerIndex)}.{" "}
                     {current.options[current.correctAnswerIndex]}
                   </span>
                 </p>
               )}
               {current.explanation && (
                 <p className="mt-1.5 leading-relaxed text-zinc-600 dark:text-zinc-300">
-                  {current.explanation}
+                  {current.explanation.replace(/\s*[—–]\s*/g, ": ")}
                 </p>
               )}
               {current.sourceDoc && (

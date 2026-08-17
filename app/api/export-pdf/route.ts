@@ -10,6 +10,7 @@ import { MAX_BODY_BYTES, clientIp, originAllowed, rateLimited } from "@/lib/api-
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+export const maxDuration = 60;
 
 let cachedCss: string | null = null;
 function getCss() {
@@ -96,12 +97,6 @@ export async function POST(req: NextRequest) {
   }
 
   const css = getCss();
-  if (!css) {
-    return NextResponse.json(
-      { error: "Print stylesheet unavailable." },
-      { status: 500 }
-    );
-  }
 
   const { renderToStaticMarkup } = await import("react-dom/server");
   const markup = renderToStaticMarkup(
@@ -112,6 +107,7 @@ export async function POST(req: NextRequest) {
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:;">
     <style>${css}</style>
   </head>
   <body>

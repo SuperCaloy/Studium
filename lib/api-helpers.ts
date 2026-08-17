@@ -47,7 +47,14 @@ export async function rateLimited(key: string): Promise<boolean> {
       if (v.resetAt <= now) RATE_TRACKER.delete(k);
     }
     // Hard cap to prevent memory blowout from IP spoofing
-    if (RATE_TRACKER.size > 1000) RATE_TRACKER.clear();
+    if (RATE_TRACKER.size > 1000) {
+      let toDelete = RATE_TRACKER.size - 500;
+      for (const [k] of RATE_TRACKER.entries()) {
+        RATE_TRACKER.delete(k);
+        toDelete--;
+        if (toDelete <= 0) break;
+      }
+    }
   }
 
   const entry = RATE_TRACKER.get(key);
@@ -97,7 +104,7 @@ export function clientIp(req: NextRequest): string {
 
 export function originAllowed(req: NextRequest): boolean {
   const origin = req.headers.get("origin");
-  const host = req.headers.get("host");
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
 
   if (!host) return false;
 

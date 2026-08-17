@@ -32,7 +32,7 @@ export interface ProviderConfig {
 }
 
 const MAX_CONTEXT_CHARS = 40000;
-const MAX_DOC_CHARS = 20000;
+const MAX_DOC_CHARS = 12000;
 
 export const PROVIDERS = [
   {
@@ -192,33 +192,32 @@ function parseTermsPart(raw: string): ShardParts {
 }
 
 function buildTopicsPrompt(topicCap: number): string {
-  return `You are an expert study material generator. You extract information ONLY from the provided documents. Never invent facts, definitions, or topics that are not present in the input text. Ground every claim in the source material. Response must be valid JSON only, no markdown fences.
+  return `Extract info ONLY from provided docs. Ground every claim. Output JSON only. Tone must be highly professional and academic.
 
 Rules:
-1. IGNORE anything that looks like references, citations, bibliographies, ISBNs, URLs, copyright lines, school/logo boilerplate, tables of contents, or pretest/posttest question banks in the source.
-2. COMPRESSION & SYNTHESIS: Your output MUST be significantly shorter and more concise than the source material. Summarize aggressively. Strictly avoid robotic meta-language (e.g., do NOT say "This document covers", "In this reviewer", "We will explore"). Deliver direct, high-impact conceptual takeaways immediately.
-3. ZERO RAW CODE: Exclude all source code syntax, programming boilerplate, and raw code blocks. Translate any code implementations into standard mathematical notation, theoretical formulas, or clean logical step-by-step workflows. Clearly define each formula and its variables.
-4. title: pick a meaningful subject title from the document headings; never use a course code, school/department name, or page furniture. A person's name is only allowed as a title when that person is genuinely the subject of the material (e.g. a hero, historical figure, doctor, or military leader the lesson is ABOUT). If the name only appears in a byline, signature, or instructor/faculty attribution line, never use it as the title or a topic title.
-5. overview: 2-3 concise sentences summarizing the material.
-6. keyTakeaways: 5-8 concise, factual takeaways drawn strictly from the text.
-7. topics: include EVERY major section the text supports, up to ${topicCap}. Each topic has a title, a 1-sentence summary, and as many details as the material supports (heading + bullet points). When a section is about a specific person (hero, historical figure, doctor, or military leader), use that person's name as the topic title. When a section is just instructor/faculty attribution (e.g. "Prepared by Dr. X", a byline, or a signature line), do not turn it into a topic.
-8. conceptMap: Evaluate if the material has complex relational concepts (e.g., biological processes, historical causes, system architectures) that would benefit from a visual mind map. If it's just a flat list of definitions, set "isNeeded": false. If "isNeeded": true, provide "mappings" as an array of 3-element arrays: [Source Concept, relationship, Target Concept]. Example: ["Chloroplasts", "contains", "Chlorophyll"]. Keep concepts short (1-3 words). Max 15 mappings.
-9. Never include placeholder text or ellipses like "...".
-10. Keep the reviewer dense and high-value: retain every core definition, concept, and technical detail, but cut filler explanations, redundant restatements, and generic padding. Every bullet must state a fact or detail that is not already covered elsewhere.
-11. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, add to, or completely discard any field if it is not directly grounded in the source text.`;
+1. Ignore citations, bibliographies, URLs, boilerplate, table of contents.
+2. Synthesize & Compress: Output must be dense. No meta-language ("This covers").
+3. No raw code: Translate to standard math/logic notation.
+4. NEVER use em-dashes (—). Use normal hyphens or colons instead.
+5. title: Meaningful subject heading (not course code/school name).
+6. overview: 2-3 sentence summary.
+7. keyTakeaways: 5-8 factual takeaways.
+8. topics: Every major section (up to ${topicCap}). Title, 1-sentence summary, details (heading+points).
+9. conceptMap: Map complex relational concepts. "mappings": [["Concept A", "relation", "Concept B"]]. Max 15 mappings. If simple list, "isNeeded": false.
+10. No placeholders or ellipses. Keep it high-value, skip filler.
+11. Draft may be provided. Verify against source text.`;
 }
 
 function buildTermsPrompt(termCap: number): string {
-  return `You are an expert glossary generator. You extract terms and definitions ONLY from the provided documents. Response must be valid JSON only, no markdown fences.
+  return `Extract terms & definitions ONLY from provided docs. Output JSON only. Tone must be highly professional and academic.
 
 Rules:
-1. IGNORE anything that looks like references, citations, bibliographies, ISBNs, URLs, copyright lines, school/logo boilerplate, tables of contents, or pretest/posttest question banks in the source.
-2. terms: a glossary of ALL important terms found in the text, up to ${termCap}, with definitions lifted/paraphrased from the text. Include the source document filename in sourceDoc for every term.
-3. ACCURACY & PRECISION: Provide concise, conceptually exact definitions derived strictly from the source context without ambiguity.
-4. BREVITY: Definitions MUST be extremely concise (1-2 sentences maximum, under 30 words).
-5. Keep definitions tight: retain the technical detail that identifies each term, but cut filler and padding.
-6. Never include placeholder text or ellipses like "...".
-7. A candidate draft may be provided in the user message. It is an unverified skeleton; correct, add to, or completely discard any field if it is not directly grounded in the source text.`;
+1. Ignore citations, boilerplate, table of contents.
+2. NEVER use em-dashes (—). Use normal hyphens or colons instead.
+3. terms: Glossary of key terms (up to ${termCap}). Include 'sourceDoc'.
+4. Definitions must be complete, grammatically correct sentences (e.g. "Photosynthesis is the process...", not "Photosynthesis process..."). 1-2 sentences max (<30 words). Cut filler.
+5. No placeholders or ellipses.
+6. Draft may be provided. Verify against source text.`;
 }
 
 function asString(value: unknown): string {
@@ -295,7 +294,7 @@ function sanitizeParts(parts: ShardParts): ShardParts {
   return sanitized;
 }
 
-function assembleReviewer(
+export function assembleReviewer(
   docs: ExtractedDocument[],
   parts: ShardParts,
   draft?: SourceDraft,
@@ -350,7 +349,7 @@ const PROVIDER_ORDER = PROVIDERS.map((p) => p.id);
 // not always Mistral. The offset advances on every generateCards call.
 let rotationOffset = 0;
 
-function preferredFor(
+export function preferredFor(
   taskIndex: number,
   available: string[]
 ): TaskPreference {
@@ -643,13 +642,19 @@ function buildUserContent(
   draft?: SourceDraft,
   protectedFacts: string[] = []
 ): string {
+  // Guarantee each doc gets a fair chunk of the 40k max chars
+  const charsPerDoc = Math.max(2000, Math.min(MAX_DOC_CHARS, Math.floor(MAX_CONTEXT_CHARS / (docs.length || 1))));
+  
   const documentsText = docs
     .map((d) => {
       let text = condenseDoc(d);
-      if (text.length > MAX_DOC_CHARS) text = text.slice(0, MAX_DOC_CHARS);
+      if (text.length > charsPerDoc) {
+        text = text.slice(0, charsPerDoc) + "\n[... truncated for length ...]";
+      }
       return `--- ${d.name} (${d.format}) ---\n${text}`;
     })
     .join("\n\n");
+    
   const draftText =
     draft &&
     `\n\nCandidate draft extracted from the source (verify, correct, or discard as needed):\n${JSON.stringify(draft)}`;
@@ -666,7 +671,8 @@ export async function generateCards(
   modelOverrides?: Partial<Record<keyof ProviderKeys, string>>,
   draft?: SourceDraft,
   protectedFacts: string[] = [],
-  facts: Fact[] = []
+  facts: Fact[] = [],
+  onProgress?: (event: string, data: any) => void
 ): Promise<CardsResult> {
   const userContent = buildUserContent(docs, draft, protectedFacts);
   const startedAt = Date.now();
@@ -694,7 +700,11 @@ export async function generateCards(
         systemPrompt: buildTopicsPrompt(p.topicCap),
         schema: TOPICS_SCHEMA,
       }),
-      (raw) => parseTopicsPart(raw) as ShardParts,
+      (raw) => {
+        const t = parseTopicsPart(raw) as ShardParts;
+        if (onProgress) onProgress("topics", t);
+        return t;
+      },
       userContent,
       failures
     ),
@@ -707,7 +717,11 @@ export async function generateCards(
         systemPrompt: buildTermsPrompt(p.termCap),
         schema: TERMS_SCHEMA,
       }),
-      (raw) => parseTermsPart(raw) as ShardParts,
+      (raw) => {
+        const t = parseTermsPart(raw) as ShardParts;
+        if (onProgress) onProgress("terms", t);
+        return t;
+      },
       userContent,
       failures
     ),

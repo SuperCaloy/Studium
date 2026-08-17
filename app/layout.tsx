@@ -19,9 +19,17 @@ const geistMono = Geist_Mono({
 // Removed Newsreader to stick to Geist sans
 
 export const metadata: Metadata = {
-  title: "Studium | Study reviewer generator",
+  title: "Studium | AI Study Guide & Reviewer Generator",
   description:
-    "Turn your PDF, DOCX, and TXT study notes into a structured reviewer with summaries, topics, terms, flashcards, and a randomized quiz. Your files never leave your device.",
+    "Transform course materials into an interactive study guide in seconds. Instantly generate AI-powered flashcards, practice quizzes, and comprehensive summaries—built exclusively from your notes. Your files never leave your device.",
+  keywords: ["study guide generator", "AI flashcards", "practice quizzes", "student reviewer", "PDF to quiz", "study notes"],
+  openGraph: {
+    title: "Studium | AI Study Guide & Reviewer Generator",
+    description: "Instantly generate AI-powered flashcards, practice quizzes, and comprehensive summaries from your notes.",
+    type: "website",
+    locale: "en_US",
+    siteName: "Studium"
+  }
 };
 
 export const viewport: Viewport = {
