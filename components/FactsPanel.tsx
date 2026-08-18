@@ -7,7 +7,7 @@ export default function FactsPanel({ facts }: { facts: Fact[] }) {
   if (facts.length === 0) {
     return (
       <p className="py-8 text-center text-sm text-zinc-500">
-        No key facts or formulas detected in the source text.
+        No key facts or data detected in the source text.
       </p>
     );
   }
@@ -15,7 +15,7 @@ export default function FactsPanel({ facts }: { facts: Fact[] }) {
   return (
     <div className="space-y-4">
       <p className="text-sm leading-relaxed text-zinc-500 dark:text-zinc-400">
-        Formulas, equations, units, and constants extracted from your source
+        Key facts, figures, and data extracted from your source
         material.
       </p>
       <div className="overflow-hidden rounded-xl border border-zinc-200 dark:border-zinc-700">

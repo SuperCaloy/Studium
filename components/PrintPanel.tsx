@@ -40,8 +40,8 @@ export default function PrintPanel({ reviewer }: { reviewer: ReviewerData }) {
               <p className="sr-topic-label">Topic {ti + 1}</p>
               <h3 className="sr-topic-title">{topic.title}</h3>
               <p className="sr-topic-summary">{topic.summary}</p>
-              {topic.details.map((d) => (
-                <div key={d.id} className="sr-detail">
+              {topic.details.map((d, di) => (
+                <div key={d.id || di} className="sr-detail">
                   <p className="sr-detail-head">{d.heading}</p>
                   <ul className="sr-detail-points">
                     {d.points.map((p, i) => (
@@ -83,7 +83,7 @@ export default function PrintPanel({ reviewer }: { reviewer: ReviewerData }) {
 
   if ((reviewer.facts ?? []).length > 0) {
     sections.push({
-      title: "Key Facts & Formulas",
+      title: "Key Facts & Data",
       el: (
         <table className="sr-table">
           <thead>

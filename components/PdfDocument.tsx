@@ -16,16 +16,16 @@ const COLORS = {
 
 const styles = StyleSheet.create({
   page: {
-    padding: "50px 60px",
+    padding: "30px 40px",
     fontFamily: "Times-Roman",
     backgroundColor: COLORS.bg,
   },
   cover: {
-    paddingTop: 80,
-    paddingBottom: 40,
+    paddingTop: 30,
+    paddingBottom: 20,
     borderBottomWidth: 1.5,
     borderBottomColor: COLORS.accent,
-    marginBottom: 30,
+    marginBottom: 16,
   },
   docType: {
     fontFamily: "Helvetica",
@@ -34,111 +34,111 @@ const styles = StyleSheet.create({
     color: COLORS.accent,
     textTransform: "uppercase",
     letterSpacing: 2,
-    marginBottom: 16,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 32,
+    fontSize: 24,
     fontWeight: 700,
     color: COLORS.text,
     lineHeight: 1.2,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   overview: {
-    fontSize: 13,
+    fontSize: 11,
     color: COLORS.muted,
-    lineHeight: 1.6,
+    lineHeight: 1.4,
     fontStyle: "italic",
-    maxWidth: 400,
+    maxWidth: "100%",
   },
   section: {
-    marginTop: 20,
-    marginBottom: 16,
+    marginTop: 12,
+    marginBottom: 8,
   },
   sectionHeader: {
     borderLeftWidth: 3,
     borderLeftColor: COLORS.accent,
-    paddingLeft: 12,
-    marginBottom: 16,
-    marginTop: 12,
+    paddingLeft: 8,
+    marginBottom: 8,
+    marginTop: 6,
   },
   sectionTitle: {
-    fontSize: 20,
+    fontSize: 14,
     fontWeight: 700,
     color: COLORS.text,
   },
   subHeading: {
-    fontSize: 14,
+    fontSize: 12,
     fontWeight: 600,
     color: COLORS.text,
-    marginTop: 12,
-    marginBottom: 6,
+    marginTop: 8,
+    marginBottom: 4,
   },
   text: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.text,
-    lineHeight: 1.7,
-    marginBottom: 8,
+    lineHeight: 1.4,
+    marginBottom: 4,
   },
   bulletList: {
     marginLeft: 6,
-    marginBottom: 12,
+    marginBottom: 6,
   },
   bulletItem: {
     flexDirection: "row",
-    marginBottom: 6,
+    marginBottom: 3,
     paddingLeft: 4,
   },
   bullet: {
-    width: 12,
-    fontSize: 11,
+    width: 10,
+    fontSize: 10,
     color: COLORS.accent,
   },
   bulletText: {
     flex: 1,
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.text,
-    lineHeight: 1.6,
+    lineHeight: 1.4,
   },
   termBox: {
-    marginBottom: 10,
-    padding: 12,
+    marginBottom: 4,
+    padding: 6,
     backgroundColor: COLORS.accentLight,
     borderLeftWidth: 2,
     borderLeftColor: COLORS.accent,
   },
   termTitle: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: 700,
     color: COLORS.accent,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   termDef: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.text,
-    lineHeight: 1.5,
+    lineHeight: 1.4,
   },
   divider: {
     height: 1,
     backgroundColor: COLORS.border,
-    marginVertical: 20,
+    marginVertical: 10,
   },
   factBox: {
     flexDirection: "row",
-    marginBottom: 6,
+    marginBottom: 3,
   },
   factFormula: {
     fontFamily: "Helvetica",
     fontWeight: 600,
-    fontSize: 10,
+    fontSize: 9,
     color: COLORS.accent,
-    width: "30%",
-    paddingRight: 10,
+    width: "25%",
+    paddingRight: 6,
   },
   factContext: {
-    fontSize: 11,
+    fontSize: 10,
     color: COLORS.text,
     flex: 1,
-    lineHeight: 1.4,
+    lineHeight: 1.3,
   },
 });
 
@@ -172,12 +172,12 @@ export const PdfDocument = ({ reviewer }: { reviewer: ReviewerData }) => (
 
       {/* Facts (if any) */}
       {reviewer?.facts?.length > 0 && (
-        <View style={styles.section} wrap={false}>
+        <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Formulas & Constants</Text>
+            <Text style={styles.sectionTitle}>Key Facts & Data</Text>
           </View>
           {(reviewer?.facts || []).filter(Boolean).map((fact, i) => (
-            <View key={i} style={styles.factBox}>
+            <View key={i} style={styles.factBox} wrap={false}>
               <Text style={styles.factFormula}>{fact.formula}</Text>
               <Text style={styles.factContext}>{fact.context}</Text>
             </View>

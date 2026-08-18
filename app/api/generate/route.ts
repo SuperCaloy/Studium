@@ -59,6 +59,15 @@ export async function POST(req: NextRequest) {
   const { keys, modelOverrides } = buildProviderKeys();
   const hasAnyKey = Object.values(keys).some((k) => k && k.length > 0);
   const totalWords = docs.reduce((s, d) => s + d.wordCount, 0);
+  const totalChars = docs.reduce((s, d) => s + d.text.length, 0);
+  
+  if (totalChars > 200000) {
+    return NextResponse.json(
+      { error: "Document is too large. Please limit to approximately 50,000 words to ensure reliable generation." },
+      { status: 413 }
+    );
+  }
+
   const sourceText = docs.map((d) => d.text).join("\n\n");
   const questionTarget = 100;
   const isStream = req.nextUrl.searchParams.get("stream") === "true";
