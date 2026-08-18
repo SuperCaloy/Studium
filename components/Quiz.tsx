@@ -12,6 +12,7 @@ import {
   Loader2,
 } from "lucide-react";
 import type { QuizQuestion } from "@/lib/types";
+import { shuffle } from "@/lib/utils";
 
 interface Props {
   bank: QuizQuestion[];
@@ -22,14 +23,7 @@ interface Props {
 
 const TARGET_OPTIONS = [10, 20, 30, 50, 70, 100];
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+
 
 type Status = "setup" | "running" | "finished";
 
@@ -55,7 +49,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
           options: q.options,
           selected: selectedIndex === -1 ? "Skipped" : q.options[selectedIndex],
           correct: q.options[q.correctAnswerIndex],
-          context: context,
+          context: context ? context.slice(0, 5000) : undefined,
         }),
       });
 
@@ -80,6 +74,9 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
       setAiExplaining((prev) => ({ ...prev, [q.id]: false }));
     }
   };
+
+  const maxAvailable = Math.min(100, bank.length);
+  const activeTarget = Math.max(1, Math.min(target, maxAvailable));
 
   const start = () => {
     // Explicitly use activeTarget to guarantee the generated session matches what the user saw highlighted
@@ -116,7 +113,6 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
     onTargetChange(n);
   };
 
-  const maxAvailable = Math.min(100, bank.length);
   const availableTargets = (() => {
     const base = TARGET_OPTIONS.filter((n) => n <= maxAvailable);
     if (maxAvailable > 0 && !base.includes(maxAvailable)) {
@@ -124,7 +120,6 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
     }
     return base.length > 0 ? base : maxAvailable > 0 ? [maxAvailable] : [];
   })();
-  const activeTarget = Math.max(1, Math.min(target, maxAvailable));
 
   if (bank.length === 0) {
     return (

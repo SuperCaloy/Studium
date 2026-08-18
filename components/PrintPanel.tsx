@@ -83,7 +83,7 @@ export default function PrintPanel({ reviewer }: { reviewer: ReviewerData }) {
 
   if ((reviewer.facts ?? []).length > 0) {
     sections.push({
-      title: "Key Facts & Formulas",
+      title: "Key Facts & Data",
       el: (
         <table className="sr-table">
           <thead>
