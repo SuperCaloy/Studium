@@ -138,22 +138,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.border,
     marginVertical: 20,
   },
-  footer: {
-    position: "absolute",
-    bottom: 40,
-    left: 60,
-    right: 60,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    paddingTop: 12,
-  },
-  footerText: {
-    fontFamily: "Inter",
-    fontSize: 8,
-    color: COLORS.muted,
-  },
   factBox: {
     flexDirection: "row",
     marginBottom: 6,
@@ -256,12 +240,6 @@ export const PdfDocument = ({ reviewer }: { reviewer: ReviewerData }) => (
           ))}
         </View>
       )}
-
-      {/* Footer */}
-      <View style={styles.footer} fixed>
-        <Text style={styles.footerText}>Studium AI Reviewer</Text>
-        <Text style={styles.footerText} render={({ pageNumber, totalPages }: { pageNumber: number, totalPages: number }) => `Page ${pageNumber} of ${totalPages}`} />
-      </View>
     </Page>
   </Document>
 );
