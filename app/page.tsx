@@ -407,7 +407,7 @@ export default function Home() {
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-8">
         {!hasReviewer ? (
           <>
-            <section className="grid items-start gap-12 lg:grid-cols-[1.05fr_1fr]">
+            <section className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr]">
               <div className="animate-slide-up pt-4 sm:pt-8">
                 <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-brand dark:text-brand-light">
                   PDF / DOCX / TXT
@@ -421,11 +421,14 @@ export default function Home() {
                 <p className="mt-5 max-w-[52ch] text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
                   Transform course materials into an interactive study guide in seconds. Instantly generate AI-powered flashcards, practice quizzes, and comprehensive summaries built exclusively from your notes.
                 </p>
-                <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-amber-200/50 bg-amber-50/50 p-3.5 text-xs leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200 sm:max-w-[52ch]">
-                  <ShieldCheck size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
-                  <p>
-                    <strong>Privacy Notice:</strong> Please do not upload documents containing sensitive personal information (PII). This application utilizes free-tier AI APIs which may retain your data for model training.
-                  </p>
+                <div className="mt-8 flex items-start gap-3.5 rounded-2xl border border-zinc-200/60 bg-zinc-50/50 p-4 text-sm leading-relaxed text-zinc-600 dark:border-zinc-800/60 dark:bg-zinc-900/50 dark:text-zinc-400 sm:max-w-[52ch]">
+                  <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand/10 text-brand dark:bg-brand/20 dark:text-brand-light">
+                    <ShieldCheck size={16} />
+                  </div>
+                  <div>
+                    <strong className="font-semibold text-zinc-900 dark:text-zinc-100">Privacy note:</strong>{" "}
+                    Please do not upload files containing private or sensitive information (like passwords or personal records) to keep your data safe.
+                  </div>
                 </div>
               </div>
 
