@@ -5,18 +5,18 @@ import type { ReviewerData } from "@/lib/types";
 Font.register({
   family: "EB Garamond",
   fonts: [
-    { src: "https://fonts.gstatic.com/s/ebgaramond/v26/SlGdmQSNjdsmc35JDF1K5E55Y-YDv7Q.ttf", fontWeight: 400 },
-    { src: "https://fonts.gstatic.com/s/ebgaramond/v26/SlGdmQSNjdsmc35JDF1K5E55Y-abvrQ.ttf", fontWeight: 600 },
-    { src: "https://fonts.gstatic.com/s/ebgaramond/v26/SlGdmQSNjdsmc35JDF1K5E55Y-aBvbQ.ttf", fontWeight: 700 },
-    { src: "https://fonts.gstatic.com/s/ebgaramond/v26/SlGcmQSNjdsmc35JDF1K5E55cOJcfZ83Cg.ttf", fontWeight: 400, fontStyle: "italic" },
+    { src: "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Regular.ttf", fontWeight: 400 },
+    { src: "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-SemiBold.ttf", fontWeight: 600 },
+    { src: "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Bold.ttf", fontWeight: 700 },
+    { src: "https://raw.githubusercontent.com/google/fonts/main/ofl/ebgaramond/EBGaramond-Italic.ttf", fontWeight: 400, fontStyle: "italic" },
   ],
 });
 
 Font.register({
   family: "Inter",
   fonts: [
-    { src: "https://fonts.gstatic.com/s/inter/v12/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuLyeMZhrib2Bg-4.ttf", fontWeight: 400 },
-    { src: "https://fonts.gstatic.com/s/inter/v12/UcCO3FwrK3iLTeHuS_fvQtMwCp50KnMw2boKoduKmMEVuI6fMZhrib2Bg-4.ttf", fontWeight: 600 },
+    { src: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/static/Inter-Regular.ttf", fontWeight: 400 },
+    { src: "https://raw.githubusercontent.com/google/fonts/main/ofl/inter/static/Inter-SemiBold.ttf", fontWeight: 600 },
   ],
 });
 
