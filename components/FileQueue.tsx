@@ -44,7 +44,7 @@ export default function FileQueue({ items, onRemove, disabled }: Props) {
           >
             <Icon format={item.format} />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium text-zinc-900 dark:text-zinc-100">
+              <p className="truncate max-w-xs text-sm font-medium text-zinc-900 dark:text-zinc-100" title={item.name}>
                 {item.name}
               </p>
               <div className="flex flex-wrap items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">

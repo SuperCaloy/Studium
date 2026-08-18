@@ -6,6 +6,7 @@ import type {
   TopicAccordion,
   ConceptMapData,
   TopicDetail,
+  QuizQuestion,
 } from "./types";
 import { REVIEWER_SCHEMA_VERSION } from "./types";
 import { normalizeIds } from "./reviewer-generator";
@@ -50,6 +51,7 @@ export const PROVIDERS = [
     id: "gemini",
     name: "Gemini",
     kind: "gemini",
+    baseUrl: "https://generativelanguage.googleapis.com/v1beta",
     models: ["gemini-3.5-flash"],
     maxOutputTokens: 16000,
     timeoutMs: 120000,
@@ -98,6 +100,7 @@ interface ShardParts {
   topics?: TopicAccordion[];
   terms?: TermDefinition[];
   conceptMap?: ConceptMapData;
+  scenarioQuestions?: QuizQuestion[];
 }
 
 interface TaskResult<T> {
@@ -148,6 +151,14 @@ function extractBalancedObjects(s: string): string[] {
   return out;
 }
 
+function safeJson(raw: string): any {
+  try {
+    return JSON.parse(stripCodeFence(raw));
+  } catch {
+    return null;
+  }
+}
+
 function salvageJson(raw: string, arrayKey: string): unknown {
   const cleaned = stripCodeFence(raw).slice(0, 500000);
   try {
@@ -173,7 +184,36 @@ function salvageJson(raw: string, arrayKey: string): unknown {
   return { [arrayKey]: parsed };
 }
 
-function parseTopicsPart(raw: string): ShardParts {
+export function parseScenarioQuizPart(raw: string): Partial<ShardParts> {
+  const parsed = safeJson(raw);
+  if (!parsed || !Array.isArray(parsed.scenarioQuestions)) return {};
+  
+  const questions: QuizQuestion[] = [];
+  for (const q of parsed.scenarioQuestions) {
+    if (
+      q.question &&
+      Array.isArray(q.options) &&
+      q.options.length === 4 &&
+      typeof q.correctAnswerIndex === "number" &&
+      q.correctAnswerIndex >= 0 &&
+      q.correctAnswerIndex <= 3 &&
+      q.explanation
+    ) {
+      questions.push({
+        id: 0, // Assigned later
+        type: "mcq",
+        question: q.question,
+        options: q.options,
+        correctAnswerIndex: q.correctAnswerIndex,
+        explanation: q.explanation,
+        difficulty: "hard",
+      });
+    }
+  }
+  return { scenarioQuestions: questions };
+}
+
+function parseTopicsPart(raw: string): Partial<ShardParts> {
   const p = salvageJson(raw, "topics") as ShardParts;
   if (typeof p !== "object" || p === null)
     throw new Error("The model returned a malformed topics response.");
@@ -189,6 +229,25 @@ function parseTermsPart(raw: string): ShardParts {
   if (!Array.isArray(p.terms) || p.terms.length === 0)
     throw new Error("The model returned no terms.");
   return p;
+}
+
+const SCENARIO_QUIZ_SCHEMA = `{
+  "scenarioQuestions": [
+    {
+      "question": "string (A detailed, critical-thinking scenario)",
+      "options": ["string", "string", "string", "string"],
+      "correctAnswerIndex": "number (0-3)",
+      "explanation": "string"
+    }
+  ]
+}`;
+
+function buildScenarioQuizPrompt(limit: number): string {
+  return `You are an expert examiner. Based on the study materials, generate exactly ${limit} highly challenging, critical-thinking "scenario" multiple-choice questions. 
+- Do NOT generate simple factual recall questions.
+- Create real-world scenarios or complex application questions that test deep understanding.
+- Provide exactly 4 plausible options for each question.
+- Format the output strictly as JSON matching the schema.`;
 }
 
 function buildTopicsPrompt(topicCap: number): string {
@@ -332,7 +391,7 @@ export function assembleReviewer(
     terms,
     conceptMap: parts.conceptMap,
     facts,
-    quizBank: [],
+    quizBank: parts.scenarioQuestions || [],
     engine: "ai",
     version: REVIEWER_SCHEMA_VERSION,
   };
@@ -686,7 +745,7 @@ export async function generateCards(
   // Advance offset for key distribution if Gemini is prioritized
   rotationOffset = (rotationOffset + 1) % 100;
 
-  const preferences: TaskPreference[] = Array.from({ length: 2 }, (_, i) => {
+  const preferences: TaskPreference[] = Array.from({ length: 3 }, (_, i) => {
     return preferredFor(i, available);
   });
 
@@ -725,11 +784,25 @@ export async function generateCards(
       userContent,
       failures
     ),
+    runTask(
+      "scenario",
+      keys,
+      modelOverrides,
+      preferences[2],
+      (p) => ({
+        systemPrompt: buildScenarioQuizPrompt(10), // Limit to 10 questions to save tokens
+        schema: SCENARIO_QUIZ_SCHEMA,
+      }),
+      (raw) => parseScenarioQuizPart(raw) as ShardParts,
+      userContent,
+      failures
+    ),
   ];
 
   const results = await Promise.all(tasks);
   const topicsResult = results[0];
   const termsResult = results[1];
+  const scenarioResult = results[2];
 
   if (!topicsResult && !termsResult) {
     throw new Error(
@@ -742,6 +815,7 @@ export async function generateCards(
   const parts: ShardParts = {
     ...(topicsResult?.value ?? {}),
     ...(termsResult?.value ?? {}),
+    ...(scenarioResult?.value ?? {}),
   };
   const reviewer = assembleReviewer(docs, parts, draft, facts);
   console.log(

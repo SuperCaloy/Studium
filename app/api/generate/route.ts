@@ -60,7 +60,7 @@ export async function POST(req: NextRequest) {
   const hasAnyKey = Object.values(keys).some((k) => k && k.length > 0);
   const totalWords = docs.reduce((s, d) => s + d.wordCount, 0);
   const sourceText = docs.map((d) => d.text).join("\n\n");
-  const questionTarget = 70;
+  const questionTarget = 100;
   const isStream = req.nextUrl.searchParams.get("stream") === "true";
 
   if (isStream) {
@@ -86,16 +86,24 @@ export async function POST(req: NextRequest) {
           );
           
           const cards = result.reviewer;
-          const quiz = buildQuizFromReviewer(
+          const aiQuiz = cards.quizBank || [];
+          const proceduralQuiz = buildQuizFromReviewer(
             cards.topics,
             cards.terms,
             cards.summary.keyTakeaways,
             sourceText,
-            questionTarget
+            questionTarget - aiQuiz.length
           );
           
-          const reviewer = { ...cards, quizBank: quiz };
-          send("quiz", quiz);
+          // Fix IDs of procedural quiz to not clash with AI quiz
+          const mergedQuiz = [...aiQuiz];
+          let seq = aiQuiz.length;
+          for (const q of proceduralQuiz) {
+            mergedQuiz.push({ ...q, id: seq++ });
+          }
+          
+          const reviewer = { ...cards, quizBank: mergedQuiz };
+          send("quiz", mergedQuiz);
           send("done", reviewer);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "unknown error";
@@ -133,16 +141,24 @@ export async function POST(req: NextRequest) {
         factsFromSpans(protectedSpans)
       );
       const cards = result.reviewer;
-      const quiz = buildQuizFromReviewer(
+      const aiQuiz = cards.quizBank || [];
+      const proceduralQuiz = buildQuizFromReviewer(
         cards.topics,
         cards.terms,
         cards.summary.keyTakeaways,
         sourceText,
-        questionTarget
+        questionTarget - aiQuiz.length
       );
-      reviewer = { ...cards, quizBank: quiz };
+      
+      const mergedQuiz = [...aiQuiz];
+      let seq = aiQuiz.length;
+      for (const q of proceduralQuiz) {
+        mergedQuiz.push({ ...q, id: seq++ });
+      }
+      
+      reviewer = { ...cards, quizBank: mergedQuiz };
       console.log(
-        `[generate] ai ok docs=${docs.length} words=${totalWords} topics=${reviewer.topics.length} terms=${reviewer.terms.length} quiz=${quiz.length} ms=${Date.now() - started}`
+        `[generate] ai ok docs=${docs.length} words=${totalWords} topics=${reviewer.topics.length} terms=${reviewer.terms.length} quiz=${mergedQuiz.length} ms=${Date.now() - started}`
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "unknown error";
