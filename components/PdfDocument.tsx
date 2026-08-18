@@ -2,23 +2,7 @@ import React from "react";
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
 import type { ReviewerData } from "@/lib/types";
 
-Font.register({
-  family: "EB Garamond",
-  fonts: [
-    { src: "/api/fonts?family=EB+Garamond&weight=400", fontWeight: 400 },
-    { src: "/api/fonts?family=EB+Garamond&weight=600", fontWeight: 600 },
-    { src: "/api/fonts?family=EB+Garamond&weight=700", fontWeight: 700 },
-    { src: "/api/fonts?family=EB+Garamond&weight=400&italic=true", fontWeight: 400, fontStyle: "italic" },
-  ],
-});
-
-Font.register({
-  family: "Inter",
-  fonts: [
-    { src: "/api/fonts?family=Inter&weight=400", fontWeight: 400 },
-    { src: "/api/fonts?family=Inter&weight=600", fontWeight: 600 },
-  ],
-});
+// Removed custom font registration. Using reliable default standard fonts.
 
 // minimax-pdf 'Academic' Design Tokens
 const COLORS = {
@@ -33,7 +17,7 @@ const COLORS = {
 const styles = StyleSheet.create({
   page: {
     padding: "50px 60px",
-    fontFamily: "EB Garamond",
+    fontFamily: "Times-Roman",
     backgroundColor: COLORS.bg,
   },
   cover: {
@@ -44,7 +28,7 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   docType: {
-    fontFamily: "Inter",
+    fontFamily: "Helvetica",
     fontSize: 9,
     fontWeight: 600,
     color: COLORS.accent,
@@ -143,7 +127,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   factFormula: {
-    fontFamily: "Inter",
+    fontFamily: "Helvetica",
     fontWeight: 600,
     fontSize: 10,
     color: COLORS.accent,
