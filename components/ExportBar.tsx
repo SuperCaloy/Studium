@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Eye, FileDown, Loader2, Printer, X } from "lucide-react";
+import { Eye, FileDown, Loader2, X } from "lucide-react";
 import type { ReviewerData } from "@/lib/types";
 
 interface Props {
@@ -67,9 +67,6 @@ export default function ExportBar({ reviewer }: Props) {
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
 
   const handlePreview = async () => {
     if (previewing || previewUrl) return;
@@ -106,13 +103,7 @@ export default function ExportBar({ reviewer }: Props) {
           {downloading ? "Preparing PDF..." : "Download PDF"}
         </button>
 
-        <button
-          onClick={handlePrint}
-          className="flex items-center justify-center gap-2 rounded-xl border border-zinc-200 bg-white px-4 py-2.5 text-sm font-medium text-zinc-700 transition hover:border-brand hover:text-brand dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
-        >
-          <Printer size={16} />
-          Print / Save PDF
-        </button>
+
       </div>
 
       {error && <p className="text-xs font-medium text-red-600">{error}</p>}

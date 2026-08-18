@@ -23,6 +23,7 @@ import FileQueue from "@/components/FileQueue";
 import ProgressSteps from "@/components/ProgressSteps";
 import Dashboard from "@/components/Dashboard";
 import PrintPanel from "@/components/PrintPanel";
+import ConfirmModal from "@/components/ConfirmModal";
 import { extractText, formatBytes } from "@/lib/text-extractor";
 import { normalizeIds } from "@/lib/reviewer-generator";
 import {
@@ -58,11 +59,11 @@ const serializeDocs = (docs: ExtractedDocument[]) =>
   }));
 
 const FEATURES = [
-  { icon: FileText, title: "Get to the point", text: "Skim the core concepts in seconds, not hours.", span: "sm:col-span-2 lg:col-span-2" },
-  { icon: FolderOpen, title: "Structured learning", text: "Your messy notes, automatically organized by subject.", span: "sm:col-span-1 lg:col-span-1" },
-  { icon: BookMarked, title: "Instant glossary", text: "Every key term extracted and defined.", span: "sm:col-span-1 lg:col-span-1" },
-  { icon: Layers, title: "Active recall, built-in", text: "Flip digital cards to lock information into your long-term memory.", span: "sm:col-span-2 lg:col-span-1" },
-  { icon: ListChecks, title: "Test yourself", text: "Custom quizzes generated dynamically to find your weak spots.", span: "sm:col-span-1 lg:col-span-1" },
+  { icon: FileText, title: "Accelerated Learning", text: "Grasp core concepts in seconds, rather than hours.", span: "sm:col-span-2 lg:col-span-2" },
+  { icon: FolderOpen, title: "Intelligent Organization", text: "Turn messy lecture notes into structured, subject-based outlines.", span: "sm:col-span-1 lg:col-span-1" },
+  { icon: BookMarked, title: "Auto-Generated Glossary", text: "Instantly extract and define every key term.", span: "sm:col-span-1 lg:col-span-1" },
+  { icon: Layers, title: "Active Recall Engine", text: "Reinforce memory with auto-generated digital flashcards.", span: "sm:col-span-2 lg:col-span-1" },
+  { icon: ListChecks, title: "Adaptive Quizzing", text: "Identify knowledge gaps with dynamic, custom-generated practice tests.", span: "sm:col-span-1 lg:col-span-1" },
 ];
 
 export default function Home() {
@@ -74,8 +75,16 @@ export default function Home() {
   const [fallback, setFallback] = useState(false);
   const [hydrated, setHydrated] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText: string;
+    onConfirm: () => void;
+  } | null>(null);
   const generationToken = useRef(0);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const showNotice = (msg: string) => {
     setNotice(msg);
@@ -125,16 +134,35 @@ export default function Home() {
 
   const handleFiles = useCallback(
     (files: File[]) => {
-      files.forEach(async (file) => {
-        const duplicate = queue.some(
-          (q) =>
-            q.name.toLowerCase() === file.name.toLowerCase() &&
-            q.sizeBytes === file.size
-        );
-        if (duplicate) {
-          showNotice(`"${file.name}" is already in your queue`);
-          return;
+      const newItems: QueueItem[] = [];
+      const filesToProcess: { file: File; item: QueueItem }[] = [];
+      
+      let limitHit = false;
+      let sizeHit = false;
+      let dupeHit = false;
+
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) {
+          sizeHit = true;
+          continue;
         }
+
+        const duplicate = queue.some(
+          (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
+        ) || newItems.some(
+          (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
+        );
+        
+        if (duplicate) {
+          dupeHit = true;
+          continue;
+        }
+
+        if (queue.length + newItems.length >= 5) {
+          limitHit = true;
+          continue;
+        }
+
         const item: QueueItem = {
           id: crypto.randomUUID(),
           name: file.name,
@@ -146,31 +174,43 @@ export default function Home() {
         if (["pdf", "docx", "txt"].includes(ext ?? "")) {
           item.format = ext as QueueItem["format"];
         }
-        setQueue((q) => [...q, item]);
 
-        try {
-          const doc = await extractText(file);
-          setQueue((q) =>
-            q.map((x) =>
-              x.id === item.id
-                ? { ...x, status: "ready", extracted: doc }
-                : x
-            )
-          );
-        } catch (err) {
-          setQueue((q) =>
-            q.map((x) =>
-              x.id === item.id
-                ? {
-                    ...x,
-                    status: "error",
-                    error: err instanceof Error ? err.message : "Failed to parse",
-                  }
-                : x
-            )
-          );
-        }
-      });
+        newItems.push(item);
+        filesToProcess.push({ file, item });
+      }
+
+      if (limitHit) {
+        showNotice("Maximum 5 files allowed. Extra files were ignored.");
+      } else if (sizeHit) {
+        showNotice("Files exceeding the 10MB limit were ignored.");
+      } else if (dupeHit) {
+        showNotice("Duplicate files were ignored.");
+      }
+
+      if (newItems.length > 0) {
+        setQueue((q) => [...q, ...newItems]);
+        filesToProcess.forEach(({ file, item }) => {
+          extractText(file)
+            .then(doc => {
+              setQueue((q) =>
+                q.map((x) => (x.id === item.id ? { ...x, status: "ready", extracted: doc } : x))
+              );
+            })
+            .catch(err => {
+              setQueue((q) =>
+                q.map((x) =>
+                  x.id === item.id
+                    ? {
+                        ...x,
+                        status: "error",
+                        error: err instanceof Error ? err.message : "Failed to parse",
+                      }
+                    : x
+                )
+              );
+            });
+        });
+      }
     },
     [queue]
   );
@@ -180,20 +220,48 @@ export default function Home() {
     setQueue((q) => q.filter((x) => x.id !== id));
   };
 
-  const handleNewSession = async () => {
-    generationToken.current++;
-    await clearAll();
-    setReviewer(null);
-    setQueue([]);
-    setFallback(false);
-    setProgress(null);
-    setGenerating(false);
+  const promptNewSession = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Start New Session?",
+      message: "Are you sure you want to clear everything? All your uploaded documents and the generated study guide will be permanently deleted.",
+      confirmText: "Yes, clear all",
+      onConfirm: async () => {
+        generationToken.current++;
+        await clearAll();
+        setReviewer(null);
+        setQueue([]);
+        setFallback(false);
+        setProgress(null);
+        setGenerating(false);
+      }
+    });
+  };
+
+  const promptCancelGeneration = () => {
+    setConfirmModal({
+      isOpen: true,
+      title: "Cancel Generation?",
+      message: "Are you sure you want to stop generating? Your current progress will be lost.",
+      confirmText: "Yes, cancel",
+      onConfirm: () => {
+        if (abortControllerRef.current) {
+          abortControllerRef.current.abort();
+        }
+        generationToken.current++;
+        setGenerating(false);
+        setProgress(null);
+      }
+    });
   };
 
   async function runGeneration(docs: ExtractedDocument[]) {
     if (docs.length === 0) return;
     generationToken.current++;
     const token = generationToken.current;
+    
+    abortControllerRef.current = new AbortController();
+    
     setGenerating(true);
     setFallback(false);
     setProgress({
@@ -216,47 +284,97 @@ export default function Home() {
       message: "Finding the most important topics and terms…",
     });
 
-    let result: ReviewerData | null = null;
     let usedFallback = false;
+    let currentReviewer: ReviewerData | null = null;
+    
     try {
-      const res = await fetch("/api/generate", {
+      const res = await fetch("/api/generate?stream=true", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           docs: serializeDocs(docs),
         }),
+        signal: abortControllerRef.current.signal,
       });
       if (!res.ok) {
         const body = await res.text().catch(() => "");
         throw new Error(body || `Server responded with ${res.status}.`);
       }
-      const data = await res.json();
-      if (token !== generationToken.current) return;
-      result = data.reviewer;
-      usedFallback = !!data.fallback;
+      
+      const reader = res.body?.getReader();
+      if (!reader) throw new Error("No streaming support.");
+      
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      // Show dashboard instantly with skeletons
+      currentReviewer = {
+        id: crypto.randomUUID(),
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        summary: { title: "Generating Reviewer...", overview: "", keyTakeaways: [], docCount: docs.length, totalPages: 0, totalWords: 0, targetStudyMinutes: 0 },
+        topics: [],
+        terms: [],
+        facts: [],
+        quizBank: [],
+        engine: "ai",
+      };
+      setReviewer(currentReviewer);
+      setProgress(null); // Instantly jump to dashboard to watch streaming
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (token !== generationToken.current) return;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const block of lines) {
+          const eventMatch = block.match(/event: (.*)\n/);
+          const dataMatch = block.match(/data: (.*)/);
+          if (eventMatch && dataMatch) {
+            const event = eventMatch[1];
+            const data = JSON.parse(dataMatch[1]);
+
+            if (event === "topics" && currentReviewer) {
+              const topicsWithIds = data.topics.map((t: any) => ({ ...t, id: t.id || crypto.randomUUID() }));
+              currentReviewer = { ...currentReviewer, topics: topicsWithIds };
+              setReviewer(currentReviewer);
+            } else if (event === "terms" && currentReviewer) {
+              const termsWithIds = data.terms.map((t: any) => ({ ...t, id: t.id || crypto.randomUUID() }));
+              currentReviewer = { ...currentReviewer, terms: termsWithIds };
+              setReviewer(currentReviewer);
+            } else if (event === "quiz" && currentReviewer) {
+              currentReviewer = { ...currentReviewer, quizBank: data };
+              setReviewer(currentReviewer);
+            } else if (event === "done") {
+              currentReviewer = data;
+              setReviewer(currentReviewer);
+            } else if (event === "error") {
+              throw new Error(data.message);
+            }
+          }
+        }
+      }
+      usedFallback = !!currentReviewer?.engine && currentReviewer.engine === "offline";
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        return;
+      }
       if (token !== generationToken.current) return;
       console.error("Generation failed:", err);
-      throw err;
+      // Let existing fallback mechanism handle UI state
+      usedFallback = true;
     }
 
-    if (!result) return;
+    if (!currentReviewer) return;
     if (token !== generationToken.current) return;
-    setReviewer(result);
-    await saveReviewer(result);
+    
+    await saveReviewer(currentReviewer);
     setFallback(usedFallback);
-
-    setProgress({
-      step: "building",
-      percent: 85,
-      message: `Creating your practice quizzes (${result.quizBank.length} questions)…`,
-    });
-    await sleep(250);
-
-    setProgress({ step: "done", percent: 100, message: "Your study guide is ready!" });
-    await sleep(400);
-    if (token !== generationToken.current) return;
-    setProgress(null);
+    
     setGenerating(false);
   }
 
@@ -289,7 +407,7 @@ export default function Home() {
                   </span>
                 </h2>
                 <p className="mt-5 max-w-[52ch] text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
-                  Transform any PDF, Doc, or text file into a complete study guide in seconds. Get AI-generated flashcards, practice quizzes, and summaries built strictly from your materials.
+                  Transform course materials into an interactive study guide in seconds. Instantly generate AI-powered flashcards, practice quizzes, and comprehensive summaries built exclusively from your notes.
                 </p>
               </div>
 
@@ -322,16 +440,24 @@ export default function Home() {
                     </div>
                     <div className="flex w-full items-center gap-2 sm:w-auto sm:justify-end">
                       <button
-                        onClick={handleNewSession}
+                        onClick={promptNewSession}
                         className="flex items-center gap-1 rounded-lg px-2.5 py-2.5 text-xs text-zinc-400 transition hover:text-red-500"
                       >
                         <Trash2 size={12} /> Clear all
                       </button>
                       {generating ? (
-                        <span className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-xs font-semibold text-white sm:flex-none">
-                          <Loader2 size={14} className="animate-spin" />
-                          Generating…
-                        </span>
+                        <div className="flex flex-1 items-center gap-2 sm:flex-none">
+                          <span className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-xs font-semibold text-white opacity-80 cursor-not-allowed sm:flex-none">
+                            <Loader2 size={14} className="animate-spin" />
+                            Generating…
+                          </span>
+                          <button
+                            onClick={promptCancelGeneration}
+                            className="rounded-lg border border-red-200 bg-white px-3 py-2.5 text-xs font-medium text-red-500 hover:bg-red-50 hover:text-red-600 transition"
+                          >
+                            Cancel
+                          </button>
+                        </div>
                       ) : (
                         <button
                           onClick={handleGenerate}
@@ -393,14 +519,7 @@ export default function Home() {
               </div>
             </section>
 
-            <footer className="mt-12 border-t border-zinc-200 pt-6 dark:border-zinc-800">
-              <p className="flex items-center gap-2 text-xs text-zinc-400 dark:text-zinc-500">
-                <ShieldCheck size={14} className="shrink-0" />
-                Files are processed in your browser and stored only on this
-                device. Nothing is uploaded to a server and no account is
-                needed.
-              </p>
-            </footer>
+
           </>
         ) : (
           <section className="space-y-6">
@@ -423,23 +542,28 @@ export default function Home() {
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   <button
-                    onClick={handleNewSession}
+                    onClick={promptNewSession}
                     className="flex items-center gap-1.5 rounded-lg border border-zinc-200 bg-white px-3 py-2 text-xs font-medium text-zinc-600 transition hover:border-red-400 hover:text-red-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300"
                   >
                     <Trash2 size={13} /> New session
                   </button>
-                  <button
-                    onClick={handleGenerate}
-                    disabled={generating || readyCount === 0}
-                    className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
-                  >
-                    {generating ? (
-                      <Loader2 size={14} className="animate-spin" />
-                    ) : (
+                  {generating ? (
+                    <button
+                      onClick={promptCancelGeneration}
+                      className="flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-4 py-2 text-xs font-semibold text-red-500 transition hover:bg-red-50"
+                    >
+                      Cancel
+                    </button>
+                  ) : (
+                    <button
+                      onClick={handleGenerate}
+                      disabled={readyCount === 0}
+                      className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
+                    >
                       <RefreshCcw size={14} />
-                    )}
-                    {generating ? "Updating…" : "Update Reviewer"}
-                  </button>
+                      Update Reviewer
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -487,6 +611,17 @@ export default function Home() {
       </main>
 
       {reviewer && <PrintPanel reviewer={reviewer} />}
+
+      {confirmModal && (
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmText={confirmModal.confirmText}
+          onConfirm={confirmModal.onConfirm}
+          onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
+        />
+      )}
     </div>
   );
 }

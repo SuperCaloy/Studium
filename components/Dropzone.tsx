@@ -35,17 +35,7 @@ export default function Dropzone({ onFiles, onLimitExceeded, onUnsupportedFiles,
         onUnsupportedFiles(unsupported);
       }
 
-      let files = supported;
-      if (files.length > 5) {
-        const kept = files.slice(0, 5);
-        const ignored = files.slice(5);
-        if (onLimitExceeded && ignored.length > 0) {
-          onLimitExceeded(ignored.map(f => f.name));
-        }
-        files = kept;
-      }
-
-      if (files.length > 0) onFiles(files);
+      if (supported.length > 0) onFiles(supported);
     },
     [onFiles, onLimitExceeded, onUnsupportedFiles]
   );

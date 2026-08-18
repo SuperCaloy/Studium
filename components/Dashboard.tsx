@@ -11,8 +11,10 @@ import Quiz from "./Quiz";
 import FactsPanel from "./FactsPanel";
 import ConceptMap from "./ConceptMap";
 import ExportBar from "./ExportBar";
+import TutorChat from "./TutorChat";
+import { MessageCircleQuestion } from "lucide-react";
 
-type Tab = "summary" | "map" | "topics" | "terms" | "facts" | "flashcards" | "quiz";
+type Tab = "summary" | "map" | "topics" | "terms" | "facts" | "flashcards" | "quiz" | "tutor";
 
 interface Props {
   reviewer: ReviewerData;
@@ -28,6 +30,7 @@ const TABS: { key: Tab; label: string; icon: typeof LayoutDashboard; badge?: (r:
   { key: "facts", label: "Key Facts", icon: FlaskConical, badge: (r) => (r.facts ?? []).length, show: (r) => !!(r.facts && r.facts.length > 0) },
   { key: "flashcards", label: "Flashcards", icon: Layers, badge: (r) => r.terms.length },
   { key: "quiz", label: "Quiz", icon: ListChecks, badge: (r) => r.quizBank.length },
+  { key: "tutor", label: "Tutor Chat", icon: MessageCircleQuestion },
 ];
 
 export default function Dashboard({ reviewer, questionTarget, onTargetChange }: Props) {
@@ -76,7 +79,7 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
         {tab === "topics" && <TopicsPanel topics={reviewer.topics} />}
         {tab === "terms" && <TermsTable terms={reviewer.terms} />}
         {tab === "facts" && <FactsPanel facts={reviewer.facts ?? []} />}
-        {tab === "flashcards" && <Flashcards terms={reviewer.terms} />}
+        {tab === "flashcards" && <Flashcards terms={reviewer.terms} reviewerId={reviewer.id} />}
         {tab === "quiz" && (
           <Quiz
             bank={reviewer.quizBank}
@@ -85,6 +88,7 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
             context={`${reviewer.summary.title}\n${reviewer.summary.overview}\n${reviewer.summary.keyTakeaways.join('\n')}`}
           />
         )}
+        {tab === "tutor" && <TutorChat reviewer={reviewer} />}
       </div>
     </div>
   );
