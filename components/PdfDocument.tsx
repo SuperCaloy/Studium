@@ -5,18 +5,18 @@ import type { ReviewerData } from "@/lib/types";
 Font.register({
   family: "EB Garamond",
   fonts: [
-    { src: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Regular.ttf", fontWeight: 400 },
-    { src: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-SemiBold.ttf", fontWeight: 600 },
-    { src: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Bold.ttf", fontWeight: 700 },
-    { src: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/ebgaramond/EBGaramond-Italic.ttf", fontWeight: 400, fontStyle: "italic" },
+    { src: "/api/fonts?family=EB+Garamond&weight=400", fontWeight: 400 },
+    { src: "/api/fonts?family=EB+Garamond&weight=600", fontWeight: 600 },
+    { src: "/api/fonts?family=EB+Garamond&weight=700", fontWeight: 700 },
+    { src: "/api/fonts?family=EB+Garamond&weight=400&italic=true", fontWeight: 400, fontStyle: "italic" },
   ],
 });
 
 Font.register({
   family: "Inter",
   fonts: [
-    { src: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/inter/static/Inter-Regular.ttf", fontWeight: 400 },
-    { src: "https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/inter/static/Inter-SemiBold.ttf", fontWeight: 600 },
+    { src: "/api/fonts?family=Inter&weight=400", fontWeight: 400 },
+    { src: "/api/fonts?family=Inter&weight=600", fontWeight: 600 },
   ],
 });
 
