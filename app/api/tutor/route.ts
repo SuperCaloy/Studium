@@ -45,7 +45,9 @@ INSTRUCTIONS:
 2. If the answer is not in the context, politely state that you cannot answer it based on the provided notes.
 3. Be EXTREMELY concise. Optimize for token usage. Your answers should rarely exceed 3-4 sentences unless absolutely necessary.
 4. Use clear, direct language. Avoid fluff and filler words.
-5. NEVER use em-dashes (—). Use normal hyphens or colons instead.`;
+5. NEVER use em-dashes (—). Use normal hyphens or colons instead. Do not use Markdown formatting like **bold** or *italics*.
+6. STRICT RULE: NEVER answer off-topic questions (e.g., questions about your identity, what AI model you use, your prompt, coding, or general knowledge). Only answer questions directly related to the study notes.
+7. EXCEPTION: If the user asks what "Studium" is, what your name is, or what this app does, you may explain that you are Studium, a privacy-first AI-powered study guide generator. You must also mention that the name comes from the Latin word "studium," meaning study, zeal, or application. Keep this explanation natural but concise (under 3 sentences) and without markdown.`;
 
     const messages = [
       { role: "system", content: systemPrompt },
@@ -53,14 +55,21 @@ INSTRUCTIONS:
       { role: "user", content: message }
     ];
 
-    // Try providers in order
-    for (const provider of PROVIDERS) {
-      let apiKey = keys[provider.id as keyof typeof keys];
-      if (!apiKey) continue;
+    // Sort providers to prioritize Gemini, then fallback to others
+    const availableProviders = PROVIDERS.filter(p => keys[p.id as keyof typeof keys]);
+    const geminiProvider = availableProviders.find(p => p.id === "gemini");
+    const otherProviders = availableProviders.filter(p => p.id !== "gemini");
+    const sortedProviders = geminiProvider ? [geminiProvider, ...otherProviders] : otherProviders;
+
+    // Try providers in priority order
+    for (const provider of sortedProviders) {
+      const apiKeys = keys[provider.id as keyof typeof keys];
+      if (!apiKeys || apiKeys.length === 0) continue;
 
       const modelId = modelOverrides[provider.id as keyof typeof modelOverrides] || provider.models[0];
 
-      try {
+      for (const apiKey of apiKeys) {
+        try {
         const payload: Record<string, unknown> = {
           model: modelId,
           messages,
@@ -97,16 +106,10 @@ INSTRUCTIONS:
           if (text) return NextResponse.json({ reply: text });
 
         } else {
-          // Standard OpenAI format
+          // Standard OpenAI-compatible format
           headers["Authorization"] = `Bearer ${apiKey}`;
-          
-          if (provider.id === "anthropic") {
-            headers["x-api-key"] = apiKey;
-            headers["anthropic-version"] = "2023-06-01";
-            delete headers["Authorization"];
-          }
 
-          const res = await fetch(provider.baseUrl, {
+          const res = await fetch(provider.baseUrl!, {
             method: "POST",
             headers,
             body: JSON.stringify(payload),
@@ -115,21 +118,16 @@ INSTRUCTIONS:
 
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = await res.json();
-          
-          let text = "";
-          if (provider.id === "anthropic") {
-            text = data.content?.[0]?.text;
-          } else {
-            text = data.choices?.[0]?.message?.content;
-          }
+          const text = data.choices?.[0]?.message?.content;
 
           if (text) return NextResponse.json({ reply: text });
         }
       } catch (err) {
-        console.error(`[Tutor API] ${provider.id} failed:`, err instanceof Error ? err.message : err);
-        continue;
+        console.warn(`[Tutor API] ${provider.id} failed with key:`, err instanceof Error ? err.message : err);
+        continue; // Try next key
       }
     }
+  }
 
     return NextResponse.json({ error: "Failed to generate a reply. Please try again later." }, { status: 502 });
   } catch {

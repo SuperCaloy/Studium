@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       { status: 503 }
     );
   }
-  
+
   let body: unknown;
   try {
     body = await req.json();
@@ -54,7 +54,7 @@ Options: ${options.map((o: string, i: number) => `${i + 1}. ${o}`).join('\n')}
 Correct: ${correct}
 Selected: ${selected}
 
-${safeContext ? `Context:\n${safeContext}\n\n` : ''}You are a professional academic tutor. Explain precisely why the Correct answer is right based on the context. Focus ONLY on explaining the correct answer; do NOT mention or explain the user's selected wrong answer. 
+${safeContext ? `Context:\n${safeContext}\n\n` : ''}You are a professional academic tutor. Explain precisely why the Correct answer is right based on the context. Focus ONLY on explaining the correct answer; do NOT mention or explain the user's selected wrong answer.
 CRITICAL RULES:
 1. DO NOT start your response with "The correct answer is", "Option X is", or any similar robotic preamble.
 2. Jump straight into the explanation (e.g. start immediately with the concept name like "Acceptance testing verifies...").
@@ -73,58 +73,59 @@ CRITICAL RULES:
   for (const provider of order) {
     const apiKeys = keys[provider.id];
     if (!apiKeys || apiKeys.length === 0) continue;
-    
+
     const override = modelOverrides[provider.id]?.trim();
     const model = override || provider.models[0];
-    const key = apiKeys[Math.floor(Math.random() * apiKeys.length)];
 
-    try {
-      let text = "";
-      
-      if (provider.kind === "gemini") {
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
-        const res = await fetch(url, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { maxOutputTokens: 150, temperature: 0.4 }
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text().catch(() => "Gemini API Error"));
-        const data = await res.json();
-        text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (!text) {
-          throw new Error(`Empty response. Reason: ${data.candidates?.[0]?.finishReason || 'Unknown'}`);
-        }
-      } else {
-        const res = await fetch(provider.baseUrl!, {
-          method: "POST",
-          headers: {
+    // Shuffle the keys to balance load, but try all of them
+    const shuffledKeys = [...apiKeys].sort(() => 0.5 - Math.random());
+
+    for (const key of shuffledKeys) {
+      try {
+        let text = "";
+
+        if (provider.kind === "gemini") {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ role: "user", parts: [{ text: prompt }] }],
+              generationConfig: { maxOutputTokens: 150, temperature: 0.4 }
+            }),
+          });
+          if (!res.ok) throw new Error(await res.text().catch(() => "Gemini API Error"));
+          const data = await res.json();
+          text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!text) {
+            throw new Error(`Empty response. Reason: ${data.candidates?.[0]?.finishReason || 'Unknown'}`);
+          }
+        } else {
+          const headers: Record<string, string> = {
             "Content-Type": "application/json",
             Authorization: `Bearer ${key}`,
-          },
-          body: JSON.stringify({
-            model,
-            temperature: 0.4,
-            max_tokens: 150,
-            messages: [{ role: "user", content: prompt }]
-          }),
-        });
-        if (!res.ok) throw new Error(await res.text().catch(() => "OpenAI Compat Error"));
-        const data = await res.json();
-        text = data.choices?.[0]?.message?.content;
-        if (!text) {
-          throw new Error(`Empty response. Reason: ${data.choices?.[0]?.finish_reason || 'Unknown'}`);
+          };
+          const res = await fetch(provider.baseUrl!, {
+            method: "POST",
+            headers,
+            body: JSON.stringify({
+              model,
+              temperature: 0.4,
+              max_tokens: 150,
+              messages: [{ role: "user", content: prompt }]
+            }),
+          });
+          if (!res.ok) throw new Error(await res.text().catch(() => "OpenAI Compat Error"));
+          const data = await res.json();
+          text = data.choices?.[0]?.message?.content;
         }
-      }
 
-      if (text) {
-        return NextResponse.json({ explanation: text });
+        if (text) return NextResponse.json({ explanation: text });
+      } catch (err) {
+        console.warn(`[Explain API] ${provider.id} failed with key:`, err instanceof Error ? err.message : err);
+        lastError = err instanceof Error ? err.message : "unknown error";
+        continue; // Try next key
       }
-    } catch (err) {
-      console.error(`[Explain API] ${provider.id} failed:`, err instanceof Error ? err.message : err);
-      continue;
     }
   }
 

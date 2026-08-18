@@ -2,7 +2,6 @@ import React from "react";
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
 import type { ReviewerData } from "@/lib/types";
 
-// Register fonts: EB Garamond for a classical, academic feel, and Inter for UI-like small caps
 Font.register({
   family: "EB Garamond",
   fonts: [
@@ -178,7 +177,7 @@ const styles = StyleSheet.create({
 export const PdfDocument = ({ reviewer }: { reviewer: ReviewerData }) => (
   <Document>
     <Page size="A4" style={styles.page}>
-      
+
       {/* Cover Section */}
       <View style={styles.cover}>
         <Text style={styles.docType}>Study Guide & Reviewer</Text>
@@ -226,7 +225,7 @@ export const PdfDocument = ({ reviewer }: { reviewer: ReviewerData }) => (
             <Text style={styles.sectionTitle}>{topic?.title}</Text>
           </View>
           <Text style={styles.text}>{topic?.summary}</Text>
-          
+
           {(topic?.details || []).filter(Boolean).map((detail, j) => (
             <View key={j} wrap={false} style={{ marginTop: 8 }}>
               <Text style={styles.subHeading}>{detail?.heading}</Text>
@@ -261,7 +260,7 @@ export const PdfDocument = ({ reviewer }: { reviewer: ReviewerData }) => (
       {/* Footer */}
       <View style={styles.footer} fixed>
         <Text style={styles.footerText}>Studium AI Reviewer</Text>
-        <Text style={styles.footerText} render={({ pageNumber, totalPages }) => `Page ${pageNumber} of ${totalPages}`} />
+        <Text style={styles.footerText} render={({ pageNumber, totalPages }: { pageNumber: number, totalPages: number }) => `Page ${pageNumber} of ${totalPages}`} />
       </View>
     </Page>
   </Document>
