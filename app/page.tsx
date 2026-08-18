@@ -134,90 +134,101 @@ export default function Home() {
 
   const handleFiles = useCallback(
     (files: File[]) => {
-      const newItems: QueueItem[] = [];
-      const filesToProcess: { file: File; item: QueueItem }[] = [];
-      
-      let limitHit = false;
-      let sizeHit = false;
-      let dupeHit = false;
-
-      for (const file of files) {
-        if (file.size > 10 * 1024 * 1024) {
-          sizeHit = true;
-          continue;
-        }
-
-        const duplicate = queue.some(
-          (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
-        ) || newItems.some(
-          (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
-        );
+      setQueue((currentQueue) => {
+        const newItems: QueueItem[] = [];
+        const filesToProcess: { file: File; item: QueueItem }[] = [];
         
-        if (duplicate) {
-          dupeHit = true;
-          continue;
+        let limitHit = false;
+        let sizeHit = false;
+        let dupeHit = false;
+
+        for (const file of files) {
+          if (file.size > 10 * 1024 * 1024) {
+            sizeHit = true;
+            continue;
+          }
+
+          const duplicate = currentQueue.some(
+            (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
+          ) || newItems.some(
+            (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
+          );
+          
+          if (duplicate) {
+            dupeHit = true;
+            continue;
+          }
+
+          if (currentQueue.length + newItems.length >= 5) {
+            limitHit = true;
+            continue;
+          }
+
+          const item: QueueItem = {
+            id: crypto.randomUUID(),
+            name: file.name,
+            format: "pdf",
+            sizeBytes: file.size,
+            status: "parsing",
+          };
+          const ext = file.name.toLowerCase().split(".").pop();
+          if (["pdf", "docx", "txt"].includes(ext ?? "")) {
+            item.format = ext as QueueItem["format"];
+          }
+
+          newItems.push(item);
+          filesToProcess.push({ file, item });
         }
 
-        if (queue.length + newItems.length >= 5) {
-          limitHit = true;
-          continue;
+        setTimeout(() => {
+          if (limitHit) {
+            showNotice("Maximum 5 files allowed. Extra files were ignored.");
+          } else if (sizeHit) {
+            showNotice("Files exceeding the 10MB limit were ignored.");
+          } else if (dupeHit) {
+            showNotice("Duplicate files were ignored.");
+          }
+        }, 0);
+
+        if (newItems.length > 0) {
+          filesToProcess.forEach(({ file, item }) => {
+            extractText(file)
+              .then(doc => {
+                setQueue((q) =>
+                  q.map((x) => (x.id === item.id ? { ...x, status: "ready", extracted: doc } : x))
+                );
+              })
+              .catch(err => {
+                setQueue((q) =>
+                  q.map((x) =>
+                    x.id === item.id
+                      ? {
+                          ...x,
+                          status: "error",
+                          error: err instanceof Error ? err.message : "Failed to parse",
+                        }
+                      : x
+                  )
+                );
+              });
+          });
+          return [...currentQueue, ...newItems];
         }
 
-        const item: QueueItem = {
-          id: crypto.randomUUID(),
-          name: file.name,
-          format: "pdf",
-          sizeBytes: file.size,
-          status: "parsing",
-        };
-        const ext = file.name.toLowerCase().split(".").pop();
-        if (["pdf", "docx", "txt"].includes(ext ?? "")) {
-          item.format = ext as QueueItem["format"];
-        }
-
-        newItems.push(item);
-        filesToProcess.push({ file, item });
-      }
-
-      if (limitHit) {
-        showNotice("Maximum 5 files allowed. Extra files were ignored.");
-      } else if (sizeHit) {
-        showNotice("Files exceeding the 10MB limit were ignored.");
-      } else if (dupeHit) {
-        showNotice("Duplicate files were ignored.");
-      }
-
-      if (newItems.length > 0) {
-        setQueue((q) => [...q, ...newItems]);
-        filesToProcess.forEach(({ file, item }) => {
-          extractText(file)
-            .then(doc => {
-              setQueue((q) =>
-                q.map((x) => (x.id === item.id ? { ...x, status: "ready", extracted: doc } : x))
-              );
-            })
-            .catch(err => {
-              setQueue((q) =>
-                q.map((x) =>
-                  x.id === item.id
-                    ? {
-                        ...x,
-                        status: "error",
-                        error: err instanceof Error ? err.message : "Failed to parse",
-                      }
-                    : x
-                )
-              );
-            });
-        });
-      }
+        return currentQueue;
+      });
     },
-    [queue]
+    []
   );
 
   const handleRemove = async (id: string) => {
-    await removeDocument(id);
-    setQueue((q) => q.filter((x) => x.id !== id));
+    setQueue((q) => {
+      const item = q.find((x) => x.id === id);
+      if (item?.extracted) {
+        removeDocument(item.extracted.id).catch(console.error);
+      }
+      return q.filter((x) => x.id !== id);
+    });
   };
 
   const promptNewSession = () => {
@@ -385,6 +396,7 @@ export default function Home() {
     runGeneration(docs);
   };
 
+  const isParsing = queue.some((q) => q.status === "parsing");
   const readyCount = queue.filter((q) => q.status === "ready").length;
   const hasReviewer = !!reviewer;
 
@@ -409,6 +421,12 @@ export default function Home() {
                 <p className="mt-5 max-w-[52ch] text-base leading-relaxed text-zinc-600 dark:text-zinc-400">
                   Transform course materials into an interactive study guide in seconds. Instantly generate AI-powered flashcards, practice quizzes, and comprehensive summaries built exclusively from your notes.
                 </p>
+                <div className="mt-6 flex items-start gap-2.5 rounded-xl border border-amber-200/50 bg-amber-50/50 p-3.5 text-xs leading-relaxed text-amber-800 dark:border-amber-900/50 dark:bg-amber-900/20 dark:text-amber-200 sm:max-w-[52ch]">
+                  <ShieldCheck size={16} className="mt-0.5 shrink-0 text-amber-600 dark:text-amber-400" />
+                  <p>
+                    <strong>Privacy Notice:</strong> Please do not upload documents containing sensitive personal information (PII). This application utilizes free-tier AI APIs which may retain your data for model training.
+                  </p>
+                </div>
               </div>
 
               <div className="animate-slide-up space-y-4" style={{ animationDelay: "80ms" }}>
@@ -461,10 +479,11 @@ export default function Home() {
                       ) : (
                         <button
                           onClick={handleGenerate}
-                          className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-brand-dark active:scale-[0.98] sm:flex-none"
+                          disabled={readyCount === 0 || isParsing}
+                          className="flex flex-1 items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-xs font-semibold text-white transition hover:bg-brand-dark active:scale-[0.98] sm:flex-none disabled:opacity-50"
                         >
                           <Wand2 size={14} />
-                          {hasReviewer ? "Update Reviewer" : "Generate Study Reviewer"}
+                          {isParsing ? "Parsing Files..." : hasReviewer ? "Update Reviewer" : "Generate Study Reviewer"}
                         </button>
                       )}
                     </div>
@@ -557,11 +576,11 @@ export default function Home() {
                   ) : (
                     <button
                       onClick={handleGenerate}
-                      disabled={readyCount === 0}
+                      disabled={readyCount === 0 || isParsing}
                       className="flex items-center gap-1.5 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white transition hover:bg-brand-dark disabled:opacity-50"
                     >
                       <RefreshCcw size={14} />
-                      Update Reviewer
+                      {isParsing ? "Parsing Files..." : "Update Reviewer"}
                     </button>
                   )}
                 </div>
