@@ -20,7 +20,7 @@ interface Props {
   context?: string;
 }
 
-const TARGET_OPTIONS = [10, 20, 30, 50, 70];
+const TARGET_OPTIONS = [10, 20, 30, 50, 70, 100];
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -82,7 +82,8 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
   };
 
   const start = () => {
-    setSession(shuffle(bank).slice(0, Math.min(target, bank.length)));
+    // Explicitly use activeTarget to guarantee the generated session matches what the user saw highlighted
+    setSession(shuffle(bank).slice(0, Math.min(activeTarget, bank.length)));
     setAnswers({});
     setIndex(0);
     setChecked(new Set());
@@ -115,7 +116,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
     onTargetChange(n);
   };
 
-  const maxAvailable = Math.min(70, bank.length);
+  const maxAvailable = Math.min(100, bank.length);
   const availableTargets = (() => {
     const base = TARGET_OPTIONS.filter((n) => n <= maxAvailable);
     if (maxAvailable > 0 && !base.includes(maxAvailable)) {
