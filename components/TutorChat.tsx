@@ -13,7 +13,14 @@ export default function TutorChat({ reviewer }: { reviewer: ReviewerData }) {
   const [messages, setMessages] = useState<Message[]>(() => {
     if (typeof window !== "undefined") {
       const saved = sessionStorage.getItem(`tutor_chat_${reviewer.id}`);
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) return parsed;
+        } catch {
+          // corrupt storage — fall through to the default greeting
+        }
+      }
     }
     return [{ role: "assistant", content: "Hi! I'm your AI tutor. I've read your study guide. What would you like me to explain or clarify?" }];
   });
@@ -105,7 +112,8 @@ Terms: ${reviewer.terms.map(t => `${t.term}: ${t.definition}`).join(" | ")}
           <input
             type="text"
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => setInput(e.target.value.slice(0, 2000))}
+            maxLength={2000}
             placeholder="Ask me to explain a concept..."
             className="flex-1 rounded-xl border border-zinc-200 bg-transparent px-4 py-2.5 text-sm outline-none transition focus:border-brand focus:ring-2 focus:ring-brand/20 dark:border-zinc-800 dark:focus:border-brand-light"
             disabled={loading}

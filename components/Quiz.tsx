@@ -10,6 +10,7 @@ import {
   CircleDot,
   Sparkles,
   Loader2,
+  Lightbulb,
 } from "lucide-react";
 import type { QuizQuestion } from "@/lib/types";
 import { shuffle } from "@/lib/utils";
@@ -36,6 +37,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
   const [checked, setChecked] = useState<Set<number>>(new Set());
   const [aiExplanations, setAiExplanations] = useState<Record<number, string>>({});
   const [aiExplaining, setAiExplaining] = useState<Record<number, boolean>>({});
+  const [reviewFilter, setReviewFilter] = useState<"all" | "missed" | "correct">("all");
 
   const handleExplain = async (q: QuizQuestion, selectedIndex: number) => {
     setAiExplaining((prev) => ({ ...prev, [q.id]: true }));
@@ -84,6 +86,7 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
     setAnswers({});
     setIndex(0);
     setChecked(new Set());
+    setReviewFilter("all");
     setStatus("running");
   };
 
@@ -99,12 +102,19 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
     setAnswers((a) => ({ ...a, [qid]: choice }));
   };
 
+  const reveal = () => {
+    if (!current) return;
+    if (answers[current.id] === undefined) {
+      setAnswers((a) => ({ ...a, [current.id]: -1 }));
+    }
+    setChecked((c) => new Set(c).add(current.id));
+  };
+
   const total = session.length;
-  const answered = Object.keys(answers).length;
   const correct = useMemo(
     () =>
-      session.filter((q) => checked.has(q.id) && answers[q.id] === q.correctAnswerIndex).length,
-    [session, answers, checked]
+      session.filter((q) => answers[q.id] === q.correctAnswerIndex).length,
+    [session, answers]
   );
   const score = correct;
 
@@ -189,9 +199,14 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
           : pct >= 50
             ? "Decent. Review the missed questions below."
             : "Keep studying. Review the topics and try again.";
-    const missed = session.filter(
-      (q) => answers[q.id] !== q.correctAnswerIndex
+    const reviewList = session.filter((q) =>
+      reviewFilter === "all"
+        ? true
+        : reviewFilter === "missed"
+          ? answers[q.id] !== q.correctAnswerIndex
+          : answers[q.id] === q.correctAnswerIndex
     );
+    const filters: Array<"all" | "missed" | "correct"> = ["all", "missed", "correct"];
     return (
       <div className="space-y-5">
         <div className="rounded-xl border border-zinc-200 bg-white p-8 text-center dark:border-zinc-700 dark:bg-zinc-900">
@@ -217,29 +232,138 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
           </div>
         </div>
 
-        {missed.length > 0 && (
+        {session.length > 0 && (
           <div className="space-y-3">
-            <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
-              Review missed questions
-            </h4>
-            {missed.map((q) => (
-              <div
-                key={q.id}
-                className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900"
-              >
-                <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
-                  {q.question}
-                </p>
-                <p className="mt-2 text-sm text-emerald-600 dark:text-emerald-400">
-                  ✓ {q.options[q.correctAnswerIndex]}
-                </p>
-                {q.explanation && (
-                  <p className="mt-2 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                    {q.explanation}
-                  </p>
-                )}
+            <div className="flex items-center justify-between gap-3">
+              <h4 className="text-sm font-semibold text-zinc-900 dark:text-zinc-100">
+                Review answers
+              </h4>
+              <div className="flex gap-1">
+                {filters.map((f) => (
+                  <button
+                    key={f}
+                    onClick={() => setReviewFilter(f)}
+                    className={`rounded-full px-3 py-1 text-xs font-semibold capitalize transition ${
+                      reviewFilter === f
+                        ? "bg-brand text-white"
+                        : "border border-zinc-200 text-zinc-500 hover:border-brand dark:border-zinc-700 dark:text-zinc-400"
+                    }`}
+                  >
+                    {f}
+                  </button>
+                ))}
               </div>
-            ))}
+            </div>
+
+            {reviewList.length === 0 ? (
+              <p className="rounded-xl border border-zinc-200 bg-white p-5 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-400">
+                No questions in this filter.
+              </p>
+            ) : (
+              reviewList.map((q) => {
+                const user = answers[q.id];
+                const correctChoice = q.correctAnswerIndex;
+                const isCorrect = user === correctChoice;
+                const skipped = user === undefined || user === -1;
+                return (
+                  <div
+                    key={q.id}
+                    className="rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-700 dark:bg-zinc-900"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <p className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+                        {q.question}
+                      </p>
+                      <span
+                        className={`flex shrink-0 items-center gap-1 text-xs font-semibold ${
+                          skipped
+                            ? "text-zinc-400"
+                            : isCorrect
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-red-600 dark:text-red-400"
+                        }`}
+                      >
+                        {skipped ? (
+                          "Skipped"
+                        ) : isCorrect ? (
+                          <>
+                            <Check size={14} /> Correct
+                          </>
+                        ) : (
+                          <>
+                            <X size={14} /> Incorrect
+                          </>
+                        )}
+                      </span>
+                    </div>
+
+                    <div className="mt-3 space-y-1.5 text-sm">
+                      <p
+                        className={`flex items-start gap-2 rounded-lg px-3 py-2 ${
+                          skipped
+                            ? "bg-zinc-50 text-zinc-600 dark:bg-zinc-800/60 dark:text-zinc-400"
+                            : isCorrect
+                              ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300"
+                              : "bg-red-50 text-red-700 dark:bg-red-900/30 dark:text-red-300"
+                        }`}
+                      >
+                        <span className="shrink-0 font-semibold">Your answer:</span>
+                        <span>
+                          {skipped
+                            ? "Not answered"
+                            : `${String.fromCharCode(65 + user)}. ${q.options[user]}`}
+                        </span>
+                      </p>
+                      <p className="flex items-start gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-300">
+                        <span className="shrink-0 font-semibold">Correct answer:</span>
+                        <span>
+                          {String.fromCharCode(65 + correctChoice)}.{" "}
+                          {q.options[correctChoice]}
+                        </span>
+                      </p>
+                    </div>
+
+                    {q.explanation && (
+                      <div className="mt-3 rounded-xl border border-brand/20 bg-brand/5 px-4 py-3 dark:border-brand/30 dark:bg-brand/10">
+                        <div className="mb-1 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide text-brand dark:text-brand-light">
+                          <Lightbulb size={14} /> Why this is correct
+                        </div>
+                        <p className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300">
+                          {q.explanation.replace(/\s*[—–]\s*/g, ": ")}
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="mt-3 border-t border-zinc-200 pt-3 dark:border-zinc-700/60">
+                      {!aiExplanations[q.id] && !aiExplaining[q.id] ? (
+                        <button
+                          onClick={() => handleExplain(q, user ?? -1)}
+                          className="flex items-center gap-1.5 text-xs font-semibold text-brand transition hover:text-brand-dark"
+                        >
+                          <Sparkles size={14} /> Ask AI Tutor to explain why
+                        </button>
+                      ) : (
+                        <div className="space-y-2 rounded-lg bg-zinc-50 p-3 dark:bg-zinc-800/60">
+                          {aiExplanations[q.id]?.split("\n\n").map((para, i) => (
+                            <p
+                              key={i}
+                              className="text-sm leading-relaxed text-zinc-700 dark:text-zinc-300"
+                            >
+                              {para.replace(/\*\*(.*?)\*\*/g, "$1")}
+                            </p>
+                          ))}
+                          {aiExplaining[q.id] && (
+                            <div className="flex items-center gap-2 text-xs text-brand">
+                              <Loader2 size={12} className="animate-spin" /> Thinking...
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
         )}
       </div>
@@ -398,32 +522,40 @@ export default function Quiz({ bank, questionTarget, onTargetChange, context }: 
             >
               ← Back
             </button>
-            {revealed ? (
+            {index === total - 1 ? (
+              <div className="flex items-center gap-2">
+                {!revealed && (
+                  <button
+                    onClick={reveal}
+                    className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 transition hover:border-brand dark:border-zinc-700 dark:text-zinc-300"
+                  >
+                    {answers[current.id] === undefined
+                      ? "Skip / reveal"
+                      : "Check answer"}
+                  </button>
+                )}
+                <button
+                  onClick={finish}
+                  className="flex items-center gap-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
+                >
+                  Submit <ChevronRight size={14} />
+                </button>
+              </div>
+            ) : revealed ? (
               <button
                 onClick={() => {
                   if (index < total - 1) {
                     setIndex(index + 1);
-                  } else {
-                    finish();
                   }
                 }}
                 className="flex items-center gap-1 rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white transition hover:bg-brand-dark"
               >
-                {index < total - 1 ? "Next question" : "Finish"} <ChevronRight size={14} />
+                Next question <ChevronRight size={14} />
               </button>
             ) : (
               <button
-                onClick={() => {
-                  if (answers[current.id] === undefined) {
-                    setAnswers((a) => ({
-                      ...a,
-                      [current.id]: -1,
-                    }));
-                  }
-                  setChecked((c) => new Set(c).add(current.id));
-                }}
-                disabled={answered >= total}
-                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 transition hover:border-brand disabled:opacity-40 dark:border-zinc-700 dark:text-zinc-300"
+                onClick={reveal}
+                className="rounded-lg border border-zinc-200 px-4 py-2 text-sm font-medium text-zinc-600 transition hover:border-brand dark:border-zinc-700 dark:text-zinc-300"
               >
                 {answers[current.id] === undefined
                   ? "Skip / reveal"

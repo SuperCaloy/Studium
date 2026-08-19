@@ -1212,15 +1212,15 @@ export function buildQuiz(
     const extra = [...otherItems];
     const distractorPool = shuffle([...extra, ...cleanTerms.map((t) => t.term)]);
     const distractor = distractorPool.find((d) => !list.items.includes(d));
-    if (!distractor || distractor === answer) continue;
+    if (!distractor) continue;
     const options = shuffle([answer, ...list.items.slice(1, 3), distractor]);
-    const correctAnswerIndex = options.indexOf(answer);
+    const correctAnswerIndex = options.indexOf(distractor);
     add(
       {
         question: `Which of the following is NOT an example of ${list.subject}?`,
         options,
         correctAnswerIndex,
-        explanation: `"${answer}" is an example of ${list.subject}. Examples include: ${list.items.join(", ")}.`,
+        explanation: `"${distractor}" is not an example of ${list.subject}. Examples include: ${list.items.join(", ")}.`,
         difficulty: "medium",
       },
       "mcq"
@@ -1472,14 +1472,6 @@ export function prepareDraft(docs: ExtractedDocument[]): {
     protectedFacts,
     protectedSpans,
   };
-}
-
-export function buildOfflineQuiz(
-  docs: ExtractedDocument[],
-  questionTarget: number
-): QuizQuestion[] {
-  const { text, draft } = prepareDraft(docs);
-  return buildQuiz(draft.terms, draft.topics, text, questionTarget);
 }
 
 export function normalizeIds(

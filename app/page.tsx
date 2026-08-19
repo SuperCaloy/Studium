@@ -22,6 +22,7 @@ import Dropzone from "@/components/Dropzone";
 import FileQueue from "@/components/FileQueue";
 import ProgressSteps from "@/components/ProgressSteps";
 import Dashboard from "@/components/Dashboard";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import PrintPanel from "@/components/PrintPanel";
 import ConfirmModal from "@/components/ConfirmModal";
 import { extractText, formatBytes } from "@/lib/text-extractor";
@@ -297,6 +298,8 @@ export default function Home() {
 
     let usedFallback = false;
     let currentReviewer: ReviewerData | null = null;
+    const previousReviewer = reviewer;
+    let receivedDone = false;
     
     try {
       const res = await fetch("/api/generate?stream=true", {
@@ -361,6 +364,7 @@ export default function Home() {
               currentReviewer = { ...currentReviewer, quizBank: data };
               setReviewer(currentReviewer);
             } else if (event === "done") {
+              receivedDone = true;
               currentReviewer = data;
               setReviewer(currentReviewer);
             } else if (event === "error") {
@@ -376,16 +380,26 @@ export default function Home() {
       }
       if (token !== generationToken.current) return;
       console.error("Generation failed:", err);
-      // Let existing fallback mechanism handle UI state
+      // Never save or keep the empty streaming skeleton on failure.
       usedFallback = true;
+      currentReviewer = null;
     }
 
-    if (!currentReviewer) return;
+    if (!currentReviewer) {
+      // A failed stream (no "done" event) must not leave the dashboard on an
+      // empty skeleton or persist it over the previous reviewer.
+      if (!receivedDone && previousReviewer) {
+        setReviewer(previousReviewer);
+      }
+      setFallback(usedFallback);
+      setGenerating(false);
+      return;
+    }
     if (token !== generationToken.current) return;
-    
+
     await saveReviewer(currentReviewer);
     setFallback(usedFallback);
-    
+
     setGenerating(false);
   }
 
@@ -622,11 +636,13 @@ export default function Home() {
             )}
 
             {reviewer && (
-              <Dashboard
-                reviewer={reviewer}
-                questionTarget={questionTarget}
-                onTargetChange={setQuestionTarget}
-              />
+              <ErrorBoundary>
+                <Dashboard
+                  reviewer={reviewer}
+                  questionTarget={questionTarget}
+                  onTargetChange={setQuestionTarget}
+                />
+              </ErrorBoundary>
             )}
           </section>
         )}

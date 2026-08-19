@@ -1,6 +1,6 @@
 import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 import type { ExtractedDocument, ReviewerData } from "./types";
-import { REVIEWER_SCHEMA_VERSION } from "./types";
+import { migrateReviewer } from "./migrations";
 
 interface MetaRow {
   key: string;
@@ -88,11 +88,15 @@ export async function loadLatestReviewer(): Promise<ReviewerData | null> {
   const reviewers = await loadReviewers();
   if (reviewers.length === 0) return null;
   const latest = reviewers.sort((a, b) => b.updatedAt - a.updatedAt)[0];
-  if ((latest.version ?? 1) !== REVIEWER_SCHEMA_VERSION) {
+  // Migrate older schemas in place instead of wiping every persisted
+  // reviewer on a version mismatch. Only discard data that is structurally
+  // unrecoverable.
+  const migrated = migrateReviewer(latest);
+  if (!migrated) {
     await clearReviewers();
     return null;
   }
-  return latest;
+  return migrated;
 }
 
 export async function clearReviewers(): Promise<void> {

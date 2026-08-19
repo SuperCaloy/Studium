@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateCards } from "@/lib/ai-generator";
-import type { ReviewerData } from "@/lib/types";
 import {
   buildOfflineReviewer,
   buildQuizFromReviewer,
   factsFromSpans,
   prepareDraft,
 } from "@/lib/reviewer-generator";
+import { verifyReviewerAgainstSource } from "@/lib/verify";
 import {
   MAX_BODY_BYTES,
   buildProviderKeys,
@@ -58,7 +58,6 @@ export async function POST(req: NextRequest) {
 
   const { keys, modelOverrides } = buildProviderKeys();
   const hasAnyKey = Object.values(keys).some((k) => k && k.length > 0);
-  const totalWords = docs.reduce((s, d) => s + d.wordCount, 0);
   const totalChars = docs.reduce((s, d) => s + d.text.length, 0);
   
   if (totalChars > 200000) {
@@ -101,23 +100,55 @@ export async function POST(req: NextRequest) {
             cards.terms,
             cards.summary.keyTakeaways,
             sourceText,
-            questionTarget - aiQuiz.length
+            questionTarget
           );
-          
-          // Fix IDs of procedural quiz to not clash with AI quiz
-          const mergedQuiz = [...aiQuiz];
-          let seq = aiQuiz.length;
-          for (const q of proceduralQuiz) {
+
+          // Replace AI questions that cite numbers/formulas absent from the
+          // source with grounded offline questions, then top up to the target
+          // from the unused pool. See [[decisions/grounding-verification]].
+          const verified = verifyReviewerAgainstSource(
+            { ...cards, quizBank: aiQuiz },
+            sourceText,
+            proceduralQuiz
+          );
+
+          const mergedQuiz = [...verified.reviewer.quizBank];
+          let seq = mergedQuiz.length;
+          for (const q of verified.pool) {
+            if (mergedQuiz.length >= questionTarget) break;
             mergedQuiz.push({ ...q, id: seq++ });
           }
-          
+
           const reviewer = { ...cards, quizBank: mergedQuiz };
+          if (verified.replaced > 0) {
+            send("grounding", { replaced: verified.replaced });
+          }
           send("quiz", mergedQuiz);
           send("done", reviewer);
         } catch (err) {
           const msg = err instanceof Error ? err.message : "unknown error";
-          send("error", { message: msg });
-          // Fallback handled by client
+          console.error(`[generate] ai failed, streaming offline fallback: ${msg}`);
+          // Stream a complete offline reviewer instead of an error so the
+          // client never shows (or saves) an empty streaming skeleton.
+          try {
+            const offline = buildOfflineReviewer(docs, 70);
+            const offlineQuiz =
+              offline.quizBank.length > 0
+                ? offline.quizBank
+                : buildQuizFromReviewer(
+                    offline.topics,
+                    offline.terms,
+                    offline.summary.keyTakeaways,
+                    sourceText,
+                    questionTarget
+                  );
+            send("quiz", offlineQuiz);
+            send("done", { ...offline, quizBank: offlineQuiz });
+          } catch (offlineErr) {
+            const omsg =
+              offlineErr instanceof Error ? offlineErr.message : "unknown error";
+            send("error", { message: omsg });
+          }
         } finally {
           controller.close();
         }
@@ -133,73 +164,10 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  let reviewer: ReviewerData | null = null;
-  let fallback = false;
-
-  if (hasAnyKey) {
-    const started = Date.now();
-    try {
-      const { cleanedDocs, draft, protectedFacts, protectedSpans } =
-        prepareDraft(docs);
-      const result = await generateCards(
-        cleanedDocs,
-        keys,
-        modelOverrides,
-        draft,
-        protectedFacts,
-        factsFromSpans(protectedSpans)
-      );
-      const cards = result.reviewer;
-      const aiQuiz = cards.quizBank || [];
-      const proceduralQuiz = buildQuizFromReviewer(
-        cards.topics,
-        cards.terms,
-        cards.summary.keyTakeaways,
-        sourceText,
-        questionTarget - aiQuiz.length
-      );
-      
-      const mergedQuiz = [...aiQuiz];
-      let seq = aiQuiz.length;
-      for (const q of proceduralQuiz) {
-        mergedQuiz.push({ ...q, id: seq++ });
-      }
-      
-      reviewer = { ...cards, quizBank: mergedQuiz };
-      console.log(
-        `[generate] ai ok docs=${docs.length} words=${totalWords} topics=${reviewer.topics.length} terms=${reviewer.terms.length} quiz=${mergedQuiz.length} ms=${Date.now() - started}`
-      );
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "unknown error";
-      fallback = true;
-      console.error(`[generate] ai failed, using offline: ${msg}`);
-    }
-  }
-
-  if (!reviewer) {
-    fallback = true;
-    reviewer = buildOfflineReviewer(docs, 70);
-  }
-
-  if (reviewer.quizBank.length === 0) {
-    reviewer = {
-      ...reviewer,
-      quizBank: buildQuizFromReviewer(
-        reviewer.topics,
-        reviewer.terms,
-        reviewer.summary.keyTakeaways,
-        sourceText,
-        questionTarget
-      ),
-    };
-  }
-
-  console.log(
-    `[generate] respond engine=${reviewer.engine} docs=${docs.length} words=${totalWords} quiz=${reviewer.quizBank.length} fallback=${fallback}`
+  // The UI exclusively calls ?stream=true; a non-streaming JSON path is no
+  // longer provided.
+  return NextResponse.json(
+    { error: "Streaming mode required." },
+    { status: 400 }
   );
-  return NextResponse.json({
-    reviewer,
-    fallback,
-    phase: reviewer.engine,
-  });
 }

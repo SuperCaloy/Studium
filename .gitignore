@@ -28,8 +28,7 @@ yarn-error.log*
 # screenshots and temp scripts
 *.png
 scripts/*.png
-scripts/pdf-check.pdf
-__tests__
+scripts/*.pdf
 
 CLAUDE.md
 AGENTS.md

@@ -11,7 +11,6 @@
   },
   "dependencies": {
     "@react-pdf/renderer": "^4.6.1",
-    "@sparticuz/chromium-min": "^149.0.0",
     "@types/dagre": "^0.7.54",
     "@upstash/ratelimit": "^2.0.8",
     "@upstash/redis": "^1.38.2",
