@@ -59,6 +59,8 @@ export function isQuestionGrounded(
 export interface VerificationResult {
   reviewer: ReviewerData;
   replaced: number;
+  /** Unused offline-pool questions left after replacements were drawn. */
+  pool: QuizQuestion[];
 }
 
 export function verifyReviewerAgainstSource(
@@ -86,5 +88,5 @@ export function verifyReviewerAgainstSource(
     };
   });
 
-  return { reviewer: { ...reviewer, quizBank: bank }, replaced };
+  return { reviewer: { ...reviewer, quizBank: bank }, replaced, pool: poolQueue };
 }

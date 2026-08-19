@@ -97,14 +97,24 @@ export function clientIp(req: NextRequest): string {
   const real = req.headers.get("x-real-ip");
   if (real) return real.trim();
 
-  // We explicitly ignore x-forwarded-for here as it is easily spoofable
-  // without a trusted proxy topology parser. Vercel guarantees x-real-ip.
+  // First entry of x-forwarded-for for deployments behind a trusted proxy
+  // that does not set x-real-ip. Spoofable if no such proxy is present, but
+  // still better than collapsing every client into one shared "unknown"
+  // bucket on a bare `next start`.
+  const forwarded = req.headers.get("x-forwarded-for");
+  if (forwarded) {
+    const first = forwarded.split(",")[0]?.trim();
+    if (first) return first;
+  }
+
   return "unknown";
 }
 
 export function originAllowed(req: NextRequest): boolean {
   const origin = req.headers.get("origin");
-  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  // Trust the Host header only. x-forwarded-host is client-spoofable on
+  // non-Vercel deploys and must not influence the CSRF comparison.
+  const host = req.headers.get("host");
 
   if (!host) return false;
 

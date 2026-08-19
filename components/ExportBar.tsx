@@ -40,6 +40,14 @@ export default function ExportBar({ reviewer }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, [previewUrl]);
 
+  // Revoke the preview blob URL when it's replaced or the component unmounts
+  // (e.g. clearing the session while the preview is open) to avoid leaking it.
+  useEffect(() => {
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+  }, [previewUrl]);
+
   const handleDownloadPdf = async () => {
     if (downloading) return;
     setDownloading(true);

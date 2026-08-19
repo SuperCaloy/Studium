@@ -184,31 +184,49 @@ function salvageJson(raw: string, arrayKey: string): unknown {
   return { [arrayKey]: parsed };
 }
 
+// AI models occasionally emit non-string primitives (numbers/booleans) for
+// string fields or malformed option arrays. Coerce every field to a plain
+// string so downstream rendering (React text nodes, PDF) never sees objects.
+function toDisplayString(value: unknown): string {
+  if (typeof value === "string") return value.trim();
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value === "boolean") return String(value);
+  return "";
+}
+
 export function parseScenarioQuizPart(raw: string): Partial<ShardParts> {
   const parsed = safeJson(raw);
   if (!parsed || !Array.isArray(parsed.scenarioQuestions)) return {};
-  
+
   const questions: QuizQuestion[] = [];
+  let seq = 0;
   for (const q of parsed.scenarioQuestions) {
+    const question = toDisplayString(q?.question);
+    const explanation = toDisplayString(q?.explanation);
+    const options: string[] = Array.isArray(q?.options)
+      ? q.options.map(toDisplayString)
+      : [];
+    const correctAnswerIndex = q?.correctAnswerIndex;
     if (
-      q.question &&
-      Array.isArray(q.options) &&
-      q.options.length === 4 &&
-      typeof q.correctAnswerIndex === "number" &&
-      q.correctAnswerIndex >= 0 &&
-      q.correctAnswerIndex <= 3 &&
-      q.explanation
+      !question ||
+      options.length !== 4 ||
+      options.some((o) => o.length === 0) ||
+      !Number.isInteger(correctAnswerIndex) ||
+      correctAnswerIndex < 0 ||
+      correctAnswerIndex > 3 ||
+      !explanation
     ) {
-      questions.push({
-        id: 0, // Assigned later
-        type: "mcq",
-        question: q.question,
-        options: q.options,
-        correctAnswerIndex: q.correctAnswerIndex,
-        explanation: q.explanation,
-        difficulty: "hard",
-      });
+      continue;
     }
+    questions.push({
+      id: seq++,
+      type: "mcq",
+      question,
+      options,
+      correctAnswerIndex: correctAnswerIndex as number,
+      explanation,
+      difficulty: "hard",
+    });
   }
   return { scenarioQuestions: questions };
 }
@@ -350,7 +368,24 @@ function sanitizeParts(parts: ShardParts): ShardParts {
 
   if (topics.length > 0) sanitized.topics = topics;
   if (terms.length > 0) sanitized.terms = terms;
+
+  const conceptMap = sanitizeConceptMap(parts.conceptMap);
+  if (conceptMap) sanitized.conceptMap = conceptMap;
   return sanitized;
+}
+
+function sanitizeConceptMap(raw: unknown): ConceptMapData | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const c = raw as Record<string, unknown>;
+  const isNeeded = c.isNeeded === true;
+  const mappings = Array.isArray(c.mappings)
+    ? (c.mappings as unknown[])
+        .filter((m): m is unknown[] => Array.isArray(m))
+        .map((m) => m.slice(0, 3).map((x) => asString(x)))
+        .filter((m) => m.length === 3 && m.every((x) => x.length > 0))
+        .slice(0, 15)
+    : [];
+  return { isNeeded, mappings };
 }
 
 export function assembleReviewer(
@@ -389,7 +424,7 @@ export function assembleReviewer(
     },
     topics,
     terms,
-    conceptMap: parts.conceptMap,
+    conceptMap: clean.conceptMap,
     facts,
     quizBank: parts.scenarioQuestions || [],
     engine: "ai",

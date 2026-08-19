@@ -32,11 +32,16 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const { message, context, history } = body;
 
-    if (!message || typeof message !== "string") {
+    if (typeof message !== "string" || message.trim().length === 0) {
       return NextResponse.json({ error: "Invalid message" }, { status: 400 });
     }
-
-    const sanitizedContext = context.replace(/<\/?context>/gi, "");
+    // Cap input size to bound per-request token cost. The 8MB body guard above
+    // only limits the raw payload, not how much of it reaches the provider.
+    const sanitizedMessage = message.slice(0, 2000);
+    const sanitizedContext =
+      typeof context === "string"
+        ? context.replace(/<\/?context>/gi, "").slice(0, 20000)
+        : "";
     const systemPrompt = `You are an expert, academic tutor designed to help a student study for their exams. 
 
 INSTRUCTIONS:
@@ -59,13 +64,16 @@ Remember: You must ONLY answer using the text within the <context> tags. If the 
 </system_reminder>`;
 
     const validHistory = Array.isArray(history) 
-      ? history.filter(h => h && typeof h === 'object' && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string')
+      ? history
+          .filter(h => h && typeof h === 'object' && (h.role === 'user' || h.role === 'assistant') && typeof h.content === 'string')
+          .map(h => ({ role: h.role, content: (h.content as string).slice(0, 2000) }))
+          .slice(-12)
       : [];
 
     const messages = [
       { role: "system", content: systemPrompt },
       ...validHistory,
-      { role: "user", content: message }
+      { role: "user", content: sanitizedMessage }
     ];
 
     // Sort providers to prioritize Gemini, then fallback to others
@@ -96,7 +104,7 @@ Remember: You must ONLY answer using the text within the <context> tags. If the 
 
         if (provider.kind === "gemini") {
           // Format for Gemini REST API
-          const geminiUrl = `${provider.baseUrl}/models/${modelId}:generateContent?key=${apiKey}`;
+          const geminiUrl = `${provider.baseUrl}/models/${modelId}:generateContent?key=${encodeURIComponent(apiKey)}`;
           
           const geminiContents = messages.map(m => ({
             role: m.role === 'system' ? 'user' : (m.role === 'assistant' ? 'model' : 'user'),
