@@ -1,6 +1,6 @@
 ---
 created: 2026-08-19
-last-updated: 2026-08-19
+last-updated: 2026-08-20
 status: verified
 ---
 
@@ -47,3 +47,9 @@ Linting relies solely on Next's built-in `next lint` (default config). No custom
 - **No auth anywhere** — covered in [[security|S1]].
 - **`dashboard` tab state survives tab removal** — regenerating to an offline reviewer removes the Concept Map tab while `tab` may still point at it. See [[bugs|B9]].
 - **Client error boundary** — ✅ added 2026-08-19 (`components/ErrorBoundary.tsx` wrapping `Dashboard`), see [[bugs|B4]]. Remaining panels without a boundary guard are lower risk now that `conceptMap` is sanitized server-side.
+
+## Audit additions (2026-08-20)
+
+- **`lib/ai-generator.ts` is now ~1085 lines** — past the ~1000-line healthy boundary after chunking was added. Split candidates: chunking (`chunkDocuments`/`runChunkedTask`/`mergeTopics`/`mergeTerms`), provider call machinery, parsers.
+- **`components/TutorChat.tsx` uses `JSON.parse(dataMatch[1])` on SSE payloads** — if a proxy splits a JSON object across chunks the regex `/data: (.*)/` only captures a single line; SSE data from the app is always single-line `JSON.stringify` output, so this is safe today but worth noting if multi-line event data is ever introduced.
+- **Unused `buildUserContent` truncation path** — `buildUserContent`/`condenseDoc` still emit `[... truncated ...]` markers, but the chunked path (`chunkDocuments` + `chunkUserContent`) no longer uses them; the markers survive only as a scenario-quiz fallback. Not dead, but the divergence is confusing.

@@ -18,7 +18,13 @@ import {
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+// Gemini's provider timeout is 120s and the 429 retry can add another full
+// call, so the platform budget must exceed that or the stream gets killed
+// mid-generation. A per-request deadline below this forces an early offline
+// fallback instead of stranding the client. See notes/known-issues/bugs.md P2.
+export const maxDuration = 300;
+
+const GENERATION_DEADLINE_MS = 240_000;
 
 export async function POST(req: NextRequest) {
   if (!originAllowed(req)) {
@@ -40,9 +46,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  let rawBody: string;
+  try {
+    rawBody = await req.text();
+  } catch {
+    return NextResponse.json({ error: "Invalid request body." }, { status: 400 });
+  }
+
+  // content-length can be omitted or spoofed; enforce the cap on the actual
+  // body bytes as well so an oversized request never gets fully parsed.
+  if (new TextEncoder().encode(rawBody).byteLength > MAX_BODY_BYTES) {
+    return NextResponse.json(
+      { error: "Request too large." },
+      { status: 413 }
+    );
+  }
+
   let body: unknown;
   try {
-    body = await req.json();
+    body = rawBody.length > 0 ? JSON.parse(rawBody) : {};
   } catch {
     return NextResponse.json({ error: "Invalid JSON body." }, { status: 400 });
   }
@@ -60,9 +82,9 @@ export async function POST(req: NextRequest) {
   const hasAnyKey = Object.values(keys).some((k) => k && k.length > 0);
   const totalChars = docs.reduce((s, d) => s + d.text.length, 0);
   
-  if (totalChars > 200000) {
+  if (totalChars > 300000) {
     return NextResponse.json(
-      { error: "Document is too large. Please limit to approximately 50,000 words to ensure reliable generation." },
+      { error: "Document is too large. Please limit to approximately 75,000 words to ensure reliable generation." },
       { status: 413 }
     );
   }
@@ -82,16 +104,28 @@ export async function POST(req: NextRequest) {
         try {
           if (!hasAnyKey) throw new Error("No AI provider keys configured.");
           
-          const { cleanedDocs, draft, protectedFacts, protectedSpans } = prepareDraft(docs);
-          const result = await generateCards(
-            cleanedDocs,
-            keys,
-            modelOverrides,
-            draft,
-            protectedFacts,
-            factsFromSpans(protectedSpans),
-            (event, data) => send(event, data) // stream topics and terms as they finish
-          );
+          // Skip the expensive offline term/topic extraction when AI will run;
+          // the offline fallback recomputes it if AI fails (P3).
+          const { cleanedDocs, draft, protectedFacts, protectedSpans } = prepareDraft(docs, {
+            skipTopicTermExtraction: true,
+          });
+          const result = await Promise.race([
+            generateCards(
+              cleanedDocs,
+              keys,
+              modelOverrides,
+              draft,
+              protectedFacts,
+              factsFromSpans(protectedSpans),
+              (event, data) => send(event, data) // stream topics and terms as they finish
+            ),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error("Generation timed out.")),
+                GENERATION_DEADLINE_MS
+              )
+            ),
+          ]);
           
           const cards = result.reviewer;
           const aiQuiz = cards.quizBank || [];
@@ -102,6 +136,17 @@ export async function POST(req: NextRequest) {
             sourceText,
             questionTarget
           );
+
+          send("progress", {
+            step: "building",
+            percent: 82,
+            message: "Verifying facts and building quiz questions...",
+            topics: cards.topics.length,
+            terms: cards.terms.length,
+            quiz: aiQuiz.length,
+            chunksDone: 0,
+            chunksTotal: 0,
+          });
 
           // Replace AI questions that cite numbers/formulas absent from the
           // source with grounded offline questions, then top up to the target
@@ -142,6 +187,16 @@ export async function POST(req: NextRequest) {
                     sourceText,
                     questionTarget
                   );
+            send("progress", {
+              step: "building",
+              percent: 92,
+              message: "Building reviewer from local engine...",
+              topics: offline.topics.length,
+              terms: offline.terms.length,
+              quiz: offlineQuiz.length,
+              chunksDone: 0,
+              chunksTotal: 0,
+            });
             send("quiz", offlineQuiz);
             send("done", { ...offline, quizBank: offlineQuiz });
           } catch (offlineErr) {

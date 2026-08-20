@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Outfit } from "next/font/google";
 import "./globals.css";
 import "./print.css";
 import Providers from "./Providers";
@@ -16,7 +16,11 @@ const geistMono = Geist_Mono({
   display: "swap",
 });
 
-// Removed Newsreader to stick to Geist sans
+const outfit = Outfit({
+  subsets: ["latin"],
+  variable: "--font-outfit",
+  display: "swap",
+});
 
 export const metadata: Metadata = {
   title: "Studium | AI Study Guide & Reviewer Generator",
@@ -47,7 +51,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable}`}>
+    <html lang="en" suppressHydrationWarning className={`${geistSans.variable} ${geistMono.variable} ${outfit.variable}`}>
       <body>
         <Providers>{children}</Providers>
         <Analytics />

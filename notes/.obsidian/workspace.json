@@ -11,10 +11,14 @@
             "id": "42ea0beee0a36b46",
             "type": "leaf",
             "state": {
-              "type": "empty",
-              "state": {},
+              "type": "markdown",
+              "state": {
+                "file": "known-issues/code-smells.md",
+                "mode": "source",
+                "source": false
+              },
               "icon": "lucide-file",
-              "title": "New tab"
+              "title": "code-smells"
             }
           }
         ]
@@ -181,18 +185,26 @@
       "bases:Create new base": false
     }
   },
-  "active": "a536c6f63df48718",
+  "active": "42ea0beee0a36b46",
   "lastOpenFiles": [
+    "tasks/responsive-alignment-fix.md",
+    "tasks/todos.md",
+    "ui/anti-ui-slop-review.md",
+    "known-issues/security.md",
+    "tasks/generation-ux-chunking-tutor.md",
+    "decisions/token-cost-reasoning.md",
+    "known-issues/dead-routes.md",
+    "architecture/api-routes.md",
+    "Untitled.canvas",
+    "tasks/ui-polish.md",
+    "tasks/bugfix-round-2026-08-20.md",
+    "README.md",
     "architecture/persistence.md",
     "architecture/quiz.md",
-    "tasks/todos.md",
-    "known-issues/security.md",
-    "known-issues/dead-routes.md",
     "known-issues/code-smells.md",
     "known-issues/bugs.md",
     "decisions/ai-provider-failover.md",
     "decisions/grounding-verification.md",
-    "architecture/api-routes.md",
     "decisions/pdf-export-strategy.md",
     "index.md",
     "architecture/overview.md",

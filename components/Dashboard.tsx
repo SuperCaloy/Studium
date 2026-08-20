@@ -42,6 +42,15 @@ export default function Dashboard({ reviewer, questionTarget, onTargetChange }: 
   const [isIdle, setIsIdle] = useState(false);
   const idleTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  const visibleTabs = TABS.filter((t) => (t.show ? t.show(reviewer) : true));
+
+  useEffect(() => {
+    if (!visibleTabs.some((t) => t.key === tab)) {
+      setTab("summary");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, reviewer]);
+
   const resetIdle = () => {
     setIsIdle(false);
     if (idleTimeoutRef.current) clearTimeout(idleTimeoutRef.current);

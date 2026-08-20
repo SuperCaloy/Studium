@@ -1,20 +1,19 @@
 ---
 created: 2026-08-19
-last-updated: 2026-08-19
+last-updated: 2026-08-20
 status: verified
 ---
 
 # AI Generation
 
-`lib/ai-generator.ts` — the multi-provider LLM engine. ~825 lines. Consumed by `/api/generate` (see [[api-routes]]).
+`lib/ai-generator.ts` — the multi-provider LLM engine. ~1085 lines. Consumed by `/api/generate` (see [[api-routes]]).
 
 > [!note] Related
-> [[offline-engine]] seeds this engine (draft + protected facts). [[decisions/ai-provider-failover]] captures the failover reasoning.
+> [[offline-engine]] seeds this engine (draft + protected facts). [[decisions/ai-provider-failover]] captures the failover reasoning. [[decisions/token-cost-reasoning]] documents the chunk budget math behind the 300k char ceiling.
 
 > [!warning] Known defects in this engine
-> - AI scenario questions all get `id: 0` and are never reassigned — breaks quiz tracking. See [[known-issues/bugs|B1]].
-> - `conceptMap` shard output is not sanitized — malformed AI output crashes the Concept Map tab. See [[known-issues/bugs|B4]].
-> - Gemini timeout is 120s while the route allows `maxDuration = 60`. See [[known-issues/bugs|P2]].
+> - **B13 (REGRESSION 2026-08-20)** — Chunked topics task drops `conceptMap`, `title`, `overview`, `keyTakeaways`. `salvageJson` fallback discards scalar fields on truncation. See [[known-issues/bugs|B13]]. Fix pending: update `salvageJson` to merge all parsed fields.
+> - B1 (AI quiz ids) and B4 (`conceptMap` unsanitized) and P2 (timeout mismatch) are all fixed (2026-08-19/20); timeout note reads `maxDuration = 300` with 240s race deadline. See [[known-issues/bugs|bugs]].
 
 ## Providers
 
@@ -31,14 +30,20 @@ Each has `baseUrl`, models, caps, and timeouts. Per-provider model overrides com
 ## Main entry: `generateCards(...)`
 
 Runs **3 parallel tasks**:
-1. Topics
-2. Terms
-3. Scenario quiz
+1. Topics (per-chunk)
+2. Terms (per-chunk)
+3. Scenario quiz (single pass over the whole corpus)
 
-It merges the parts, calls `assembleReviewer(...)`, and only fails if **both** topics AND terms fail. `onProgress` streams per-task completion so the API route can emit SSE `topics`/`terms` events.
+It merges the parts, calls `assembleReviewer(...)`, and only fails if **both** topics AND terms fail. `onProgress` streams per-chunk progress so the API route can emit SSE `progress`/`topics`/`terms` events.
 
 ### `assembleReviewer(...)`
-Merges/sanitizes shard output into a complete `ReviewerData` with `engine: "ai"`. Missing/null fields fall back to empty arrays (safe assembly).
+Merges/sanitizes shard output into a complete `ReviewerData` with `engine: "ai"`. Missing/null fields fall back to empty arrays (safe assembly). The fixed `.slice(0,60)` (topics) and `.slice(0,400)` (terms) caps were removed on 2026-08-20; caps are now dynamic (see below).
+
+## Chunking (added 2026-08-20)
+
+- `chunkDocuments(docs, maxChars = 12000)` — splits every doc into `DocChunk { label, text }` segments. Preserves headings via hierarchy detection; a single oversized section is hard-sliced at `maxChars`. No artificial `[... truncated ...]` markers are ever inserted (that marker still exists only in `buildUserContent`/`condenseDoc`, which are now unused by the chunked path).
+- `runChunkedTask(...)` — runs a task (topics or terms) per chunk with `mapWithConcurrency(..., 2)`, merging partials via `mergeTopics` (dedupe by lowercase title) and `mergeTerms` (dedupe by lowercase term). Uses lenient chunk parsers `parseTopicsPartLenient` / `parseTermsPartLenient` that do NOT throw on empty arrays, so a chunk with no topics/terms is not treated as a provider failure.
+- Dynamic caps (replaces the old hard 20/100/400 caps): `termCap = min(400, max(40, round(totalWords/30)))`, `topicCap = min(80, max(10, round(totalWords/150)))`.
 
 ## Provider call machinery
 
@@ -49,9 +54,9 @@ Merges/sanitizes shard output into a complete `ReviewerData` with `engine: "ai"`
 - `runTask` — iterates providers → keys → models, collecting failures to fall back through the chain.
 - `salvageJson` / `extractBalancedObjects` — recover truncated/malformed model JSON.
 
-## Context / chunking
+## Context / pre-filtering
 
-- `buildUserContent` — chunks docs fairly within `MAX_CONTEXT_CHARS = 40000`, `MAX_DOC_CHARS = 12000`.
+- `buildUserContent` — used only by the scenario-quiz task now; chunks docs fairly within `MAX_CONTEXT_CHARS = 40000`, `MAX_DOC_CHARS = 12000`.
 - Embeds `protectedFacts` as verbatim constraints plus an optional offline `draft`.
 - `stripCodeBlocks` / `condenseDoc` — drop large code blocks; long docs (>150 lines) are hierarchy-chunked preserving headings; headerless long docs fall back to an excerpted top/bottom with a `[... excerpted ...]` marker. (Covered by `__tests__/chunking.test.ts`.)
 

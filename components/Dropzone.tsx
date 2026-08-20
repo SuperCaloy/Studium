@@ -71,7 +71,7 @@ export default function Dropzone({ onFiles, onLimitExceeded, onUnsupportedFiles,
         ref={inputRef}
         type="file"
         multiple
-        accept="*"
+        accept=".pdf,.docx,.txt"
         className="hidden"
         onChange={(e) => {
           if (e.target.files) handleFiles(e.target.files);

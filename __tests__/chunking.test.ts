@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripCodeBlocks, condenseDoc } from '../lib/ai-generator';
+import { stripCodeBlocks, condenseDoc, chunkDocuments } from '../lib/ai-generator';
 import type { ExtractedDocument } from '../lib/types';
 
 describe('Chunking & Pre-filtering Edge Cases', () => {
@@ -44,5 +44,43 @@ ${filler}
     expect(condensed).toContain('[... excerpted ...]'); // Cutoff warning
     // Ensure middle is stripped
     expect(condensed).not.toContain('Headerless line 300');
+  });
+
+  it('chunkDocuments covers the whole corpus with no truncation marker', () => {
+    const filler = Array.from({ length: 40 }, (_, i) => `Section content ${i}`).join('\n');
+    const docText = `
+# Intro
+${filler}
+## Middle
+${filler}
+# End
+${filler}
+    `.trim();
+    const doc: ExtractedDocument = { id: "1", name: "big.md", text: docText, format: "txt", wordCount: 2000, pageCount: 1, sizeBytes: 20000, charCount: 20000, flags: [] };
+
+    const chunks = chunkDocuments([doc], 2000);
+    expect(chunks.length).toBeGreaterThan(1);
+    // Every chunk stays within the budget
+    for (const c of chunks) expect(c.text.length).toBeLessThanOrEqual(2400);
+    // No artificial truncation markers
+    for (const c of chunks) expect(c.text).not.toContain('[... truncated for length ...]');
+    // Labels carry the doc identity
+    expect(chunks[0].label).toContain('big.md');
+  });
+
+  it('chunkDocuments hard-slices a single oversized section', () => {
+    const docText = "# Only Section\n" + Array.from({ length: 200 }, (_, i) => `Long line ${i} text`.repeat(20)).join('\n');
+    const doc: ExtractedDocument = { id: "2", name: "wide.md", text: docText, format: "txt", wordCount: 5000, pageCount: 1, sizeBytes: 30000, charCount: 30000, flags: [] };
+
+    const chunks = chunkDocuments([doc], 2000);
+    expect(chunks.length).toBeGreaterThan(1);
+    for (const c of chunks) expect(c.text.length).toBeLessThanOrEqual(2400);
+  });
+
+  it('chunkDocuments produces a single chunk for small docs', () => {
+    const doc: ExtractedDocument = { id: "3", name: "small.txt", text: "The mitochondria is the powerhouse of the cell.", format: "txt", wordCount: 9, pageCount: 1, sizeBytes: 100, charCount: 55, flags: [] };
+    const chunks = chunkDocuments([doc], 12000);
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].text).toContain('powerhouse');
   });
 });

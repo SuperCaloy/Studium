@@ -17,10 +17,11 @@ import {
   FileDown,
   ChevronRight,
 } from "lucide-react";
+import { motion, MotionConfig } from "motion/react";
 import Header from "@/components/Header";
 import Dropzone from "@/components/Dropzone";
 import FileQueue from "@/components/FileQueue";
-import ProgressSteps from "@/components/ProgressSteps";
+import GenerationPanel from "@/components/GenerationPanel";
 import Dashboard from "@/components/Dashboard";
 import ErrorBoundary from "@/components/ErrorBoundary";
 import PrintPanel from "@/components/PrintPanel";
@@ -41,8 +42,6 @@ import type {
   QueueItem,
   ReviewerData,
 } from "@/lib/types";
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 const serializeDocs = (docs: ExtractedDocument[]) =>
   docs.map((d) => ({
@@ -75,7 +74,7 @@ export default function Home() {
   const [questionTarget, setQuestionTarget] = useState(20);
   const [fallback, setFallback] = useState(false);
   const [hydrated, setHydrated] = useState(false);
-  const [notice, setNotice] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ text: string; variant: "info" | "warning" } | null>(null);
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -86,9 +85,10 @@ export default function Home() {
   const generationToken = useRef(0);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const queueRef = useRef<QueueItem[]>([]);
 
-  const showNotice = (msg: string) => {
-    setNotice(msg);
+  const showNotice = (msg: string, variant: "info" | "warning" = "info") => {
+    setNotice({ text: msg, variant });
     if (noticeTimer.current) clearTimeout(noticeTimer.current);
     noticeTimer.current = setTimeout(() => setNotice(null), 3500);
   };
@@ -130,106 +130,104 @@ export default function Home() {
   }, [queue, hydrated]);
 
   useEffect(() => {
+    queueRef.current = queue;
+  }, [queue]);
+
+  useEffect(() => {
     localStorage.setItem("reviewer-target", String(questionTarget));
   }, [questionTarget]);
 
   const handleFiles = useCallback(
     (files: File[]) => {
-      setQueue((currentQueue) => {
-        const newItems: QueueItem[] = [];
-        const filesToProcess: { file: File; item: QueueItem }[] = [];
-        
-        let limitHit = false;
-        let sizeHit = false;
-        let dupeHit = false;
+      const currentQueue = queueRef.current;
+      const newItems: QueueItem[] = [];
+      const filesToProcess: { file: File; item: QueueItem }[] = [];
 
-        for (const file of files) {
-          if (file.size > 10 * 1024 * 1024) {
-            sizeHit = true;
-            continue;
-          }
+      let limitHit = false;
+      let sizeHit = false;
+      let dupeHit = false;
 
-          const duplicate = currentQueue.some(
-            (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
-          ) || newItems.some(
-            (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
-          );
-          
-          if (duplicate) {
-            dupeHit = true;
-            continue;
-          }
-
-          if (currentQueue.length + newItems.length >= 5) {
-            limitHit = true;
-            continue;
-          }
-
-          const item: QueueItem = {
-            id: crypto.randomUUID(),
-            name: file.name,
-            format: "pdf",
-            sizeBytes: file.size,
-            status: "parsing",
-          };
-          const ext = file.name.toLowerCase().split(".").pop();
-          if (["pdf", "docx", "txt"].includes(ext ?? "")) {
-            item.format = ext as QueueItem["format"];
-          }
-
-          newItems.push(item);
-          filesToProcess.push({ file, item });
+      for (const file of files) {
+        if (file.size > 10 * 1024 * 1024) {
+          sizeHit = true;
+          continue;
         }
 
-        setTimeout(() => {
-          if (limitHit) {
-            showNotice("Maximum 5 files allowed. Extra files were ignored.");
-          } else if (sizeHit) {
-            showNotice("Files exceeding the 10MB limit were ignored.");
-          } else if (dupeHit) {
-            showNotice("Duplicate files were ignored.");
-          }
-        }, 0);
+        const duplicate = currentQueue.some(
+          (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
+        ) || newItems.some(
+          (q) => q.name.toLowerCase() === file.name.toLowerCase() && q.sizeBytes === file.size
+        );
 
-        if (newItems.length > 0) {
-          filesToProcess.forEach(({ file, item }) => {
-            extractText(file)
-              .then(doc => {
-                setQueue((q) =>
-                  q.map((x) => (x.id === item.id ? { ...x, status: "ready", extracted: doc } : x))
-                );
-              })
-              .catch(err => {
-                setQueue((q) =>
-                  q.map((x) =>
-                    x.id === item.id
-                      ? {
-                          ...x,
-                          status: "error",
-                          error: err instanceof Error ? err.message : "Failed to parse",
-                        }
-                      : x
-                  )
-                );
-              });
+        if (duplicate) {
+          dupeHit = true;
+          continue;
+        }
+
+        if (currentQueue.length + newItems.length >= 5) {
+          limitHit = true;
+          continue;
+        }
+
+        const item: QueueItem = {
+          id: crypto.randomUUID(),
+          name: file.name,
+          format: "pdf",
+          sizeBytes: file.size,
+          status: "parsing",
+        };
+        const ext = file.name.toLowerCase().split(".").pop();
+        if (["pdf", "docx", "txt"].includes(ext ?? "")) {
+          item.format = ext as QueueItem["format"];
+        }
+
+        newItems.push(item);
+        filesToProcess.push({ file, item });
+      }
+
+      if (newItems.length > 0) {
+        setQueue((q) => [...q, ...newItems]);
+      }
+
+      if (limitHit) {
+        showNotice("Maximum 5 files allowed. Extra files were ignored.");
+      } else if (sizeHit) {
+        showNotice("Files exceeding the 10MB limit were ignored.");
+      } else if (dupeHit) {
+        showNotice("Duplicate files were ignored.");
+      }
+
+      filesToProcess.forEach(({ file, item }) => {
+        extractText(file)
+          .then(doc => {
+            setQueue((q) =>
+              q.map((x) => (x.id === item.id ? { ...x, status: "ready", extracted: doc } : x))
+            );
+          })
+          .catch(err => {
+            setQueue((q) =>
+              q.map((x) =>
+                x.id === item.id
+                  ? {
+                      ...x,
+                      status: "error",
+                      error: err instanceof Error ? err.message : "Failed to parse",
+                    }
+                  : x
+              )
+            );
           });
-          return [...currentQueue, ...newItems];
-        }
-
-        return currentQueue;
       });
     },
     []
   );
 
   const handleRemove = async (id: string) => {
-    setQueue((q) => {
-      const item = q.find((x) => x.id === id);
-      if (item?.extracted) {
-        removeDocument(item.extracted.id).catch(console.error);
-      }
-      return q.filter((x) => x.id !== id);
-    });
+    const item = queueRef.current.find((x) => x.id === id);
+    if (item?.extracted) {
+      removeDocument(item.extracted.id).catch(console.error);
+    }
+    setQueue((q) => q.filter((x) => x.id !== id));
   };
 
   const promptNewSession = () => {
@@ -277,23 +275,14 @@ export default function Home() {
     setGenerating(true);
     setFallback(false);
     setProgress({
-      step: "parsing",
-      percent: 12,
-      message: "Reading your study materials…",
-    });
-    await sleep(200);
-
-    setProgress({
-      step: "compiling",
-      percent: 30,
-      message: `Organizing notes from ${docs.length} document${docs.length === 1 ? "" : "s"}…`,
-    });
-    await sleep(300);
-
-    setProgress({
-      step: "extracting",
-      percent: 55,
-      message: "Finding the most important topics and terms…",
+      step: "chunking",
+      percent: 3,
+      message: "Splitting documents into chunks...",
+      topics: 0,
+      terms: 0,
+      quiz: 0,
+      chunksDone: 0,
+      chunksTotal: 0,
     });
 
     let usedFallback = false;
@@ -321,21 +310,6 @@ export default function Home() {
       const decoder = new TextDecoder();
       let buffer = "";
 
-      // Show dashboard instantly with skeletons
-      currentReviewer = {
-        id: crypto.randomUUID(),
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        summary: { title: "Generating Reviewer...", overview: "", keyTakeaways: [], docCount: docs.length, totalPages: 0, totalWords: 0, targetStudyMinutes: 0 },
-        topics: [],
-        terms: [],
-        facts: [],
-        quizBank: [],
-        engine: "ai",
-      };
-      setReviewer(currentReviewer);
-      setProgress(null); // Instantly jump to dashboard to watch streaming
-
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -352,21 +326,30 @@ export default function Home() {
             const event = eventMatch[1];
             const data = JSON.parse(dataMatch[1]);
 
-            if (event === "topics" && currentReviewer) {
-              const topicsWithIds = data.topics.map((t: any) => ({ ...t, id: t.id || crypto.randomUUID() }));
-              currentReviewer = { ...currentReviewer, topics: topicsWithIds };
-              setReviewer(currentReviewer);
-            } else if (event === "terms" && currentReviewer) {
-              const termsWithIds = data.terms.map((t: any) => ({ ...t, id: t.id || crypto.randomUUID() }));
-              currentReviewer = { ...currentReviewer, terms: termsWithIds };
-              setReviewer(currentReviewer);
-            } else if (event === "quiz" && currentReviewer) {
-              currentReviewer = { ...currentReviewer, quizBank: data };
-              setReviewer(currentReviewer);
+            if (event === "progress") {
+              setProgress({
+                step: data.step,
+                percent: data.percent,
+                message: data.message,
+                topics: data.topics ?? 0,
+                terms: data.terms ?? 0,
+                quiz: data.quiz ?? 0,
+                chunksDone: data.chunksDone ?? 0,
+                chunksTotal: data.chunksTotal ?? 0,
+              });
             } else if (event === "done") {
               receivedDone = true;
               currentReviewer = data;
-              setReviewer(currentReviewer);
+              setProgress({
+                step: "done",
+                percent: 100,
+                message: "Study reviewer ready!",
+                topics: data.topics?.length ?? 0,
+                terms: data.terms?.length ?? 0,
+                quiz: data.quizBank?.length ?? 0,
+                chunksDone: 0,
+                chunksTotal: 0,
+              });
             } else if (event === "error") {
               throw new Error(data.message);
             }
@@ -380,27 +363,29 @@ export default function Home() {
       }
       if (token !== generationToken.current) return;
       console.error("Generation failed:", err);
-      // Never save or keep the empty streaming skeleton on failure.
       usedFallback = true;
       currentReviewer = null;
     }
 
     if (!currentReviewer) {
       // A failed stream (no "done" event) must not leave the dashboard on an
-      // empty skeleton or persist it over the previous reviewer.
+      // empty reviewer or persist it over the previous reviewer.
       if (!receivedDone && previousReviewer) {
         setReviewer(previousReviewer);
       }
       setFallback(usedFallback);
       setGenerating(false);
+      setProgress(null);
       return;
     }
     if (token !== generationToken.current) return;
 
     await saveReviewer(currentReviewer);
+    setReviewer(currentReviewer);
     setFallback(usedFallback);
 
     setGenerating(false);
+    setProgress(null);
   }
 
   const handleGenerate = () => {
@@ -415,20 +400,21 @@ export default function Home() {
   const hasReviewer = !!reviewer;
 
   return (
-    <div className="min-h-screen">
-      <Header />
+    <MotionConfig reducedMotion="never">
+      <div className="min-h-screen">
+        <Header />
 
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-8">
         {!hasReviewer ? (
           <>
-            <section className="grid items-center gap-12 lg:grid-cols-[1.05fr_1fr]">
+            <section className="grid items-start gap-12 lg:grid-cols-[1.05fr_1fr]">
               <div className="animate-slide-up pt-4 sm:pt-8">
                 <p className="font-mono text-[11px] uppercase tracking-[0.2em] text-brand dark:text-brand-light">
                   PDF / DOCX / TXT
                 </p>
-                <h2 className="mt-4 text-balance text-4xl font-semibold leading-[1.05] tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl lg:text-6xl">
+                <h2 className="mt-4 text-balance font-display text-4xl font-semibold leading-[1.05] tracking-tight text-zinc-900 dark:text-zinc-50 sm:text-5xl lg:text-6xl">
                   Upload your notes.{" "}
-                  <span className="text-brand dark:text-brand-light">
+                  <span className="font-bold text-brand dark:text-brand-light">
                     Ace your exams.
                   </span>
                 </h2>
@@ -450,13 +436,26 @@ export default function Home() {
                 {notice && (
                   <div
                     role="status"
-                    className="animate-fade-in rounded-lg border border-brand/25 bg-brand/5 px-3 py-2.5 text-xs font-medium text-brand dark:border-brand/40 dark:bg-brand/10 dark:text-brand-light"
+                    className={`animate-fade-in rounded-lg border px-3 py-2.5 text-xs font-medium ${
+                      notice.variant === "warning"
+                        ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                        : "border-brand/25 bg-brand/5 text-brand dark:border-brand/40 dark:bg-brand/10 dark:text-brand-light"
+                    }`}
                   >
-                    {notice}
+                    {notice.text}
                   </div>
                 )}
 
-                <Dropzone onFiles={handleFiles} disabled={generating} />
+                <Dropzone
+                  onFiles={handleFiles}
+                  onUnsupportedFiles={(names) =>
+                    showNotice(
+                      `Only PDF, DOCX, or TXT files are accepted. Ignored: ${names.slice(0, 3).join(", ")}${names.length > 3 ? " and more" : ""}`,
+                      "warning"
+                    )
+                  }
+                  disabled={generating}
+                />
 
                 {queue.length > 0 && (
                   <FileQueue items={queue} onRemove={handleRemove} disabled={generating} />
@@ -509,14 +508,14 @@ export default function Home() {
 
                 {generating && progress && (
                   <div className="pt-2">
-                    <ProgressSteps progress={progress} />
+                    <GenerationPanel progress={progress} onCancel={promptCancelGeneration} />
                   </div>
                 )}
               </div>
             </section>
 
             <section className="mt-20 border-t border-zinc-200 pt-12 dark:border-zinc-800">
-              <h2 className="text-balance text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
+              <h2 className="text-balance font-display text-2xl font-semibold tracking-tight text-zinc-900 dark:text-zinc-50">
                 What you get
               </h2>
               <p className="mt-1.5 text-sm text-zinc-500 dark:text-zinc-400">
@@ -527,9 +526,11 @@ export default function Home() {
                   const Icon = f.icon;
                   const isTinted = i === 0 || i === 3;
                   return (
-                    <div
+                    <motion.div
                       key={f.title}
-                      className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border p-6 transition-[transform,border-color,box-shadow,background-color] duration-300 hover:-translate-y-1 hover:shadow-lg ${f.span} ${
+                      whileHover={{ y: -6 }}
+                      transition={{ type: "spring", stiffness: 300, damping: 22 }}
+                      className={`group relative flex flex-col justify-between overflow-hidden rounded-2xl border p-6 transition-[border-color,box-shadow,background-color] duration-300 hover:shadow-lg ${f.span} ${
                         isTinted
                           ? "border-brand/20 bg-brand/5 hover:border-brand/40 dark:border-brand/20 dark:bg-brand/10 dark:hover:border-brand/40"
                           : "border-zinc-200 bg-white hover:border-zinc-300 dark:border-zinc-800 dark:bg-zinc-900/50 dark:hover:border-zinc-700"
@@ -549,7 +550,7 @@ export default function Home() {
                       {isTinted && (
                         <div className="absolute -right-12 -top-12 h-32 w-32 rounded-full bg-brand/10 blur-2xl transition-colors duration-500 group-hover:bg-brand/20" />
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
               </div>
@@ -611,7 +612,9 @@ export default function Home() {
               </div>
             )}
 
-            {generating && progress && <ProgressSteps progress={progress} />}
+            {generating && progress && (
+              <GenerationPanel progress={progress} onCancel={promptCancelGeneration} />
+            )}
 
             {queue.length > 0 && (
               <details className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900">
@@ -622,14 +625,27 @@ export default function Home() {
                   {notice && (
                     <div
                       role="status"
-                      className="animate-fade-in mb-3 rounded-lg border border-brand/25 bg-brand/5 px-3 py-2.5 text-xs font-medium text-brand dark:border-brand/40 dark:bg-brand/10 dark:text-brand-light"
+                      className={`animate-fade-in mb-3 rounded-lg border px-3 py-2.5 text-xs font-medium ${
+                        notice.variant === "warning"
+                          ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-700 dark:bg-amber-900/20 dark:text-amber-300"
+                          : "border-brand/25 bg-brand/5 text-brand dark:border-brand/40 dark:bg-brand/10 dark:text-brand-light"
+                      }`}
                     >
-                      {notice}
+                      {notice.text}
                     </div>
                   )}
                   <FileQueue items={queue} onRemove={handleRemove} disabled={generating} />
                   <div className="mt-3">
-                    <Dropzone onFiles={handleFiles} disabled={generating} />
+                    <Dropzone
+                      onFiles={handleFiles}
+                      onUnsupportedFiles={(names) =>
+                        showNotice(
+                          `Only PDF, DOCX, or TXT files are accepted. Ignored: ${names.slice(0, 3).join(", ")}${names.length > 3 ? " and more" : ""}`,
+                          "warning"
+                        )
+                      }
+                      disabled={generating}
+                    />
                   </div>
                 </div>
               </details>
@@ -660,6 +676,7 @@ export default function Home() {
           onClose={() => setConfirmModal({ ...confirmModal, isOpen: false })}
         />
       )}
-    </div>
+      </div>
+    </MotionConfig>
   );
 }

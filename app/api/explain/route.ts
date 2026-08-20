@@ -91,7 +91,7 @@ CRITICAL RULES:
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
               contents: [{ role: "user", parts: [{ text: prompt }] }],
-              generationConfig: { maxOutputTokens: 150, temperature: 0.4 }
+              generationConfig: { maxOutputTokens: 500, temperature: 0.4 }
             }),
           });
           if (!res.ok) throw new Error(await res.text().catch(() => "Gemini API Error"));
@@ -111,7 +111,7 @@ CRITICAL RULES:
             body: JSON.stringify({
               model,
               temperature: 0.4,
-              max_tokens: 150,
+              max_tokens: 500,
               messages: [{ role: "user", content: prompt }]
             }),
           });
