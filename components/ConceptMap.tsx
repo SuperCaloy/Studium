@@ -146,7 +146,7 @@ export default function ConceptMap({ reviewer }: { reviewer: ReviewerData }) {
   }
 
   return (
-    <div className="h-[800px] w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 overflow-hidden shadow-inner dark:border-zinc-800 dark:bg-zinc-950">
+    <div className="h-[65vh] min-h-[400px] w-full rounded-2xl border border-zinc-200 bg-zinc-50/50 overflow-hidden shadow-inner dark:border-zinc-800 dark:bg-zinc-950">
       <ReactFlow
         nodes={nodes}
         edges={edges}

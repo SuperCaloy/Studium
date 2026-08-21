@@ -32,10 +32,10 @@ export default function SummaryPanel({ reviewer }: { reviewer: ReviewerData }) {
         {stats.map((st) => (
           <div
             key={st.label}
-            className="rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-700 dark:bg-zinc-900"
+            className="group rounded-xl border border-zinc-200 bg-white p-4 transition-all duration-300 hover:border-brand/40 hover:shadow-md hover:shadow-brand/[0.06] dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-brand/40"
           >
-            <st.icon size={18} className="mb-2 text-brand" />
-            <p className="text-lg font-bold text-zinc-900 dark:text-zinc-50">
+            <st.icon size={18} className="mb-2 text-brand transition-transform duration-300 group-hover:scale-110 group-hover:text-brand-dark dark:group-hover:text-brand-light" />
+            <p className="text-xl font-bold tabular-nums tracking-tight text-zinc-900 transition-colors duration-300 group-hover:text-brand dark:text-zinc-50 dark:group-hover:text-brand-light">
               {st.value}
             </p>
             <p className="text-xs text-zinc-500 dark:text-zinc-400">{st.label}</p>

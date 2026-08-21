@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import type { ExtractedDocument, FileFormat } from "./types";
 
 export const MAX_DOCS = 5;
-export const MAX_TEXT_CHARS = 50000;
+export const MAX_TEXT_CHARS = 100000;
 export const MAX_BODY_BYTES = 8 * 1024 * 1024;
 export const MAX_TARGET = 70;
 export const MIN_TARGET = 1;

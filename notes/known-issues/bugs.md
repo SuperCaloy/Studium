@@ -1,6 +1,6 @@
 ---
 created: 2026-08-19
-last-updated: 2026-08-19
+last-updated: 2026-08-20
 status: verified
 ---
 
@@ -8,8 +8,19 @@ status: verified
 
 Confirmed by a full-codebase audit on 2026-08-19. File:line references point at the code as of that audit; see the "Resolved" callout for fixes applied the same day. Security findings live in [[security]].
 
-> [!warning] Active bugs
-> B5, B9–B10 and P1–P3 below are still open. B5 (setState side effects) affects dev only. P1 (quadratic splitting) is the main performance concern.
+> [!note] All bugs resolved 2026-08-20
+> B5, B9–B10 and P1–P3 are all fixed. See "Resolved (2026-08-20)" below for the details.
+
+## Resolved (2026-08-20)
+
+> [!note] Fixed
+> - **B5** — `handleFiles` no longer runs side effects (`setTimeout` notices, `extractText`) inside the `setQueue` updater (`app/page.tsx`). The new-queue computation reads `queueRef.current` outside the updater, then `setQueue((q) => [...q, ...newItems])` is pure; notices and parsing run after. `handleRemove` also moved its `removeDocument` call out of the updater. StrictMode dev double-invocation no longer duplicates parsing or notices.
+> - **B9** — `Dashboard.tsx` now resets `tab` to `"summary"` via an effect when the active tab is no longer visible for the current `reviewer` (e.g. Concept Map removed after an AI->offline regen).
+> - **B10** — `/api/generate` no longer trusts `content-length` alone. It reads the raw body, enforces `MAX_BODY_BYTES` on the actual byte length, then JSON-parses. An oversized request is rejected before full parse regardless of header presence/spoofing.
+> - **P1** — `extractTerms` now splits sentences once (memoized per text via a local `Map` + shared `allSentences` getter) instead of re-splitting the full doc per frequency word; the per-doc loop reuses one split. `buildQuiz`'s word-blank generator computes `splitSentences(text)` once before the loop. Quadratic O(terms x doc) processing is now linear-ish (`lib/reviewer-generator.ts`).
+> - **P2** — `/api/generate` `maxDuration` raised 60 -> 300 and the AI generation is wrapped in a `Promise.race` with a 240s deadline. If the providers exceed the budget, the stream falls back to the offline reviewer instead of being killed mid-stream by the platform. See `notes/tasks/bugfix-round-2026-08-20.md`.
+> - **P3** — `prepareDraft` accepts `{ skipTopicTermExtraction: true }`; the AI streaming path passes it so the expensive offline `extractTerms`/`buildTopicsForDocs` no longer run on every generation. The offline fallback (`buildOfflineReviewer`) still computes the full draft when AI fails. Tradeoff: a partial AI failure (topics ok, terms fail) now falls back to empty topics/terms in `assembleReviewer` instead of the offline draft hint. Verified by new regression tests in `__tests__/bug-regressions.test.ts`.
+> - **B13** — `salvageJson` in `lib/ai-generator.ts` now properly merges multiple parsed objects when they contain the array key (e.g. `topics` or `terms`). `runChunkedTask` was updated to accumulate scalar fields (`title`, `overview`, `keyTakeaways`, `conceptMap`) across all chunks instead of locking onto the very first chunk's fields, preventing `conceptMap` drops. `salvageJson` now rescues hallucinatory schema structures (e.g., returning `"Topic 1": {...}` instead of a `topics` array) even when the JSON parses successfully. **Root cause confirmed 2026-08-20 (second pass):** the `generateCards` function merged `topicsResult`, `termsResult`, and `scenarioResult` with a naive object spread (`{ ...topicsResult, ...termsResult, ...scenarioResult }`). Because `termsResult` is produced by a terms-only prompt, its `topics` field is `undefined` or `[]`; the spread silently overwrote the populated `topics` array from `topicsResult`, producing an empty Topics tab every time. Fixed by replacing the spread with an explicit, guard-checked merge that only copies non-empty arrays and uses `mergeTopics`/`mergeTerms` for deduplication.
 
 ## Resolved (2026-08-19)
 
@@ -47,7 +58,7 @@ Confirmed by a full-codebase audit on 2026-08-19. File:line references point at 
 ## Medium
 
 - **B4 — `conceptMap` from AI is unsanitized (FIXED 2026-08-19)** — `assembleReviewer` passed `parts.conceptMap` through unchanged (`ai-generator.ts:392`). A malformed `mappings` (not an array) crashed `ConceptMap.tsx:83` (`.forEach` on a non-array). No error boundary existed → white screen. **Done 2026-08-19**: sanitized in `sanitizeParts` + `components/ErrorBoundary.tsx` wraps `Dashboard` in `app/page.tsx`.
-- **B5 — Side effects inside a `setState` updater** — `handleFiles` runs async `extractText` and schedules notices inside the `setQueue` updater (`page.tsx:137-219`). Double-invoked in StrictMode dev → duplicate parsing/notices.
+- **B5 — Side effects inside a `setState` updater (FIXED 2026-08-20)** — `handleFiles` runs async `extractText` and schedules notices inside the `setQueue` updater (`page.tsx:137-219`). Double-invoked in StrictMode dev → duplicate parsing/notices. Fixed by computing the new queue from `queueRef.current` outside the updater; `handleRemove` moved its `removeDocument` side effect out too.
 - **B6 — Destructive schema migration (FIXED 2026-08-19)** — `loadLatestReviewer` cleared all persisted reviewers on schema mismatch (`storage.ts:91`). No migration path. **Done 2026-08-19**: `migrateReviewer` (`lib/migrations.ts`) backfills/normalizes in place; only structurally unrecoverable data is cleared.
 - **B12 — AI scenario questions bypass string sanitization (FIXED 2026-08-19)** — `assembleReviewer` injected `parts.scenarioQuestions` raw (`ai-generator.ts:412`), skipping the `sanitizeParts` that topics/terms get; `parseScenarioQuizPart` only truthy-checked `question`/`explanation` and length-checked `options`. An LLM returning `options: [42, {}, "x", true]` stored an object in `quizBank` → React render throw (caught by the ErrorBoundary, but the Quiz UI degraded). **Done 2026-08-19**: `parseScenarioQuizPart` string-coerces every field via `toDisplayString`, drops questions with empty options or non-integer `correctAnswerIndex`. Tests: `__tests__/ai-generator.test.ts`.
 
@@ -55,11 +66,11 @@ Confirmed by a full-codebase audit on 2026-08-19. File:line references point at 
 
 - **B7 — Unguarded `JSON.parse(sessionStorage)` in `TutorChat.tsx` → crash on corrupt data (FIXED 2026-08-19)** — wrapped in try/catch with `Array.isArray` shape check; corrupt storage falls back to the default greeting.
 - **B8 — Object URL lifecycle in `ExportBar.tsx` (FIXED 2026-08-19)** — download-path revoke-after-click is reliable on current browsers; the preview blob URL leaked on unmount and is now revoked in an effect cleanup.
-- **B9 — Dashboard tab can stay active after it disappears** — e.g. regenerating from AI → offline removes the Concept Map tab while `tab` is still `"map"`; panel renders the empty state under a de-highlighted tab (`Dashboard.tsx`).
-- **B10 — Body-size check relies on `content-length`** header (`generate/route.ts:35`) which can be omitted/spoofed; downstream `sanitizeDocs` + char caps bound it, so impact is limited.
+- **B9 — Dashboard tab can stay active after it disappears (FIXED 2026-08-20)** — e.g. regenerating from AI → offline removes the Concept Map tab while `tab` is still `"map"`; panel renders the empty state under a de-highlighted tab (`Dashboard.tsx`). Fixed with an effect that resets `tab` to `"summary"` when it is no longer visible.
+- **B10 — Body-size check relies on `content-length` header (FIXED 2026-08-20)** — `generate/route.ts` only trusted the header, which can be omitted/spoofed. Now reads the raw body and enforces `MAX_BODY_BYTES` on the actual byte length before parsing.
 
 ## Performance
 
-- **P1 — Quadratic text processing** — `extractTerms` (`reviewer-generator.ts:597`) and `buildQuiz` (`:1268`) call `allSentences`/`splitSentences` (full-doc `Intl.Segmenter` re-split) inside per-frequency-word loops → O(terms × doc) on large docs (up to 200k chars). Memoize sentence splits once.
-- **P2 — `maxDuration = 60` vs Gemini timeout 120s + 429 retry** (`ai-generator.ts:57,481`) — on serverless the streaming function can be killed mid-generation; client is left on a partial stream. Needs a per-request time budget.
-- **P3 — `prepareDraft` always runs before AI** in the streaming path (`generate/route.ts:86`) — full offline NLP cost is paid on every generation even when AI succeeds.
+- **P1 — Quadratic text processing (FIXED 2026-08-20)** — `extractTerms` (`reviewer-generator.ts:597`) and `buildQuiz` (`:1268`) call `allSentences`/`splitSentences` (full-doc `Intl.Segmenter` re-split) inside per-frequency-word loops → O(terms × doc) on large docs (up to 200k chars). Sentence splits are now memoized/computed once per call.
+- **P2 — `maxDuration = 60` vs Gemini timeout 120s + 429 retry (FIXED 2026-08-20)** — `ai-generator.ts:57,481`. On serverless the streaming function could be killed mid-generation, stranding the client. `maxDuration` raised to 300 with a 240s `Promise.race` deadline that forces the offline fallback instead.
+- **P3 — `prepareDraft` always runs before AI (FIXED 2026-08-20)** — `generate/route.ts` paid the full offline NLP cost on every generation even when AI succeeds. A `skipTopicTermExtraction` option now skips `extractTerms`/`buildTopicsForDocs` in the AI path; the offline fallback recomputes them on failure.

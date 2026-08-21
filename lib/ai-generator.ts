@@ -162,7 +162,27 @@ function safeJson(raw: string): any {
 function salvageJson(raw: string, arrayKey: string): unknown {
   const cleaned = stripCodeFence(raw).slice(0, 500000);
   try {
-    return JSON.parse(cleaned);
+    const p = JSON.parse(cleaned);
+    if (Array.isArray(p)) return { [arrayKey]: p };
+    if (p && typeof p === "object") {
+      if (arrayKey in p && !Array.isArray((p as any)[arrayKey])) {
+        (p as any)[arrayKey] = [(p as any)[arrayKey]];
+      }
+      // If arrayKey is missing, try to rescue unidentifiable objects from the root values
+      if (!(arrayKey in p) || !Array.isArray((p as any)[arrayKey]) || (p as any)[arrayKey].length === 0) {
+        const rescued: any[] = [];
+        for (const [k, v] of Object.entries(p)) {
+          if (!["title", "overview", "conceptMap", "keyTakeaways", "scenarioQuestions", arrayKey].includes(k)) {
+            if (v && typeof v === "object" && !Array.isArray(v)) rescued.push(v);
+            else if (Array.isArray(v) && v.length > 0 && typeof v[0] === "object") rescued.push(...v);
+          }
+        }
+        if (rescued.length > 0) {
+          (p as any)[arrayKey] = ((p as any)[arrayKey] || []).concat(rescued);
+        }
+      }
+    }
+    return p;
   } catch {
     // truncated output — recover every complete object
   }
@@ -178,10 +198,40 @@ function salvageJson(raw: string, arrayKey: string): unknown {
       (x): x is Record<string, unknown> =>
         x !== null && typeof x === "object" && !Array.isArray(x)
     );
-  if (parsed.length === 1 && Array.isArray(parsed[0][arrayKey])) {
-    return parsed[0];
+    
+  if (parsed.length === 0) {
+    return { [arrayKey]: [] };
   }
-  return { [arrayKey]: parsed };
+
+  const merged: Record<string, unknown> = {};
+  merged[arrayKey] = [];
+
+  for (const obj of parsed) {
+    if (arrayKey in obj || "overview" in obj || "conceptMap" in obj || "keyTakeaways" in obj || "scenarioQuestions" in obj) {
+      for (const [k, v] of Object.entries(obj)) {
+        if (k === arrayKey) {
+          if (Array.isArray(v)) {
+            merged[arrayKey] = (merged[arrayKey] as unknown[]).concat(v);
+          } else {
+            (merged[arrayKey] as unknown[]).push(v);
+          }
+        } else if (Array.isArray(v)) {
+          if (!merged[k]) merged[k] = [];
+          merged[k] = (merged[k] as unknown[]).concat(v);
+        } else if (typeof v === "object" && v !== null) {
+          if (!merged[k]) merged[k] = v;
+        } else {
+          if (merged[k] === undefined || merged[k] === "") {
+            merged[k] = v;
+          }
+        }
+      }
+    } else {
+      (merged[arrayKey] as unknown[]).push(obj);
+    }
+  }
+
+  return merged;
 }
 
 // AI models occasionally emit non-string primitives (numbers/booleans) for
@@ -249,6 +299,23 @@ function parseTermsPart(raw: string): ShardParts {
   return p;
 }
 
+// Chunk-level parsers must NOT throw on empty arrays: a single chunk can
+// legitimately contain no topics/terms, and runTask would otherwise treat it
+// as a provider failure and burn a retry/failover.
+function parseTopicsPartLenient(raw: string): ShardParts {
+  const p = salvageJson(raw, "topics") as ShardParts;
+  if (typeof p !== "object" || p === null)
+    throw new Error("The model returned a malformed topics response.");
+  return p;
+}
+
+function parseTermsPartLenient(raw: string): ShardParts {
+  const p = salvageJson(raw, "terms") as ShardParts;
+  if (typeof p !== "object" || p === null)
+    throw new Error("The model returned a malformed terms response.");
+  return p;
+}
+
 const SCENARIO_QUIZ_SCHEMA = `{
   "scenarioQuestions": [
     {
@@ -279,7 +346,7 @@ Rules:
 5. title: Meaningful subject heading (not course code/school name).
 6. overview: 2-3 sentence summary.
 7. keyTakeaways: 5-8 factual takeaways.
-8. topics: Every major section (up to ${topicCap}). Title, 1-sentence summary, details (heading+points).
+8. topics: Every major section (up to ${topicCap}). Do NOT omit major sections. Title, 1-sentence summary, details (heading+points).
 9. conceptMap: Map complex relational concepts. "mappings": [["Concept A", "relation", "Concept B"]]. Max 15 mappings. If simple list, "isNeeded": false.
 10. No placeholders or ellipses. Keep it high-value, skip filler.
 11. Draft may be provided. Verify against source text.`;
@@ -291,7 +358,7 @@ function buildTermsPrompt(termCap: number): string {
 Rules:
 1. Ignore citations, boilerplate, table of contents.
 2. NEVER use em-dashes (—). Use normal hyphens or colons instead.
-3. terms: Glossary of key terms (up to ${termCap}). Include 'sourceDoc'.
+3. terms: Glossary of key terms (up to ${termCap}). Be exhaustive - extract every relevant term in this chunk. Do NOT stop early. Include 'sourceDoc'.
 4. Definitions must be complete, grammatically correct sentences (e.g. "Photosynthesis is the process...", not "Photosynthesis process..."). 1-2 sentences max (<30 words). Cut filler.
 5. No placeholders or ellipses.
 6. Draft may be provided. Verify against source text.`;
@@ -397,14 +464,8 @@ export function assembleReviewer(
   const totalWords = docs.reduce((s, d) => s + d.wordCount, 0);
   const clean = sanitizeParts(parts);
   const { topics, terms } = normalizeIds(
-    (clean.topics && clean.topics.length > 0
-      ? clean.topics
-      : draft?.topics ?? []
-    ).slice(0, 60),
-    (clean.terms && clean.terms.length > 0
-      ? clean.terms
-      : draft?.terms ?? []
-    ).slice(0, 400)
+    clean.topics && clean.topics.length > 0 ? clean.topics : draft?.topics ?? [],
+    clean.terms && clean.terms.length > 0 ? clean.terms : draft?.terms ?? []
   );
   return {
     id: crypto.randomUUID(),
@@ -731,6 +792,188 @@ export function condenseDoc(doc: ExtractedDocument): string {
   return keptText.trim();
 }
 
+interface DocChunk {
+  label: string;
+  text: string;
+}
+
+// Split every document into bounded, order-preserving chunks so the model
+// can see the whole corpus instead of the first ~40k chars. Chunks break on
+// heading boundaries (same heuristic as condenseDoc) and hard-slice any single
+// section that still exceeds the budget.
+export function chunkDocuments(
+  docs: ExtractedDocument[],
+  maxChars = 12000
+): DocChunk[] {
+  const out: DocChunk[] = [];
+  for (const doc of docs) {
+    const text = stripCodeBlocks(doc.text);
+    const lines = text.split(/\r?\n/);
+    const sections: { heading: string; lines: string[] }[] = [];
+    let currentHeading = "Document Start";
+    let currentLines: string[] = [];
+    for (const line of lines) {
+      if (/^(#{1,4}\s+|(\d+\.)+\s+[A-Z])/.test(line.trim())) {
+        if (currentLines.length > 0) {
+          sections.push({ heading: currentHeading, lines: currentLines });
+        }
+        currentHeading = line.trim();
+        currentLines = [];
+      } else {
+        currentLines.push(line);
+      }
+    }
+    if (currentLines.length > 0) {
+      sections.push({ heading: currentHeading, lines: currentLines });
+    }
+
+    let bucket: string[] = [];
+    let bucketLen = 0;
+    const flush = () => {
+      if (bucket.length === 0) return;
+      out.push({
+        label: `--- ${doc.name} (${doc.format}) ---`,
+        text: bucket.join("\n\n"),
+      });
+      bucket = [];
+      bucketLen = 0;
+    };
+
+    for (const sec of sections) {
+      const secText = `\n${sec.heading}\n` + sec.lines.join("\n");
+      if (secText.length > maxChars) {
+        flush();
+        for (let i = 0; i < secText.length; i += maxChars) {
+          out.push({
+            label: `--- ${doc.name} (${doc.format}) ---`,
+            text: secText.slice(i, i + maxChars),
+          });
+        }
+        continue;
+      }
+      if (bucketLen + secText.length > maxChars && bucket.length > 0) flush();
+      bucket.push(secText);
+      bucketLen += secText.length;
+    }
+    flush();
+  }
+  return out;
+}
+
+function chunkUserContent(
+  chunk: DocChunk,
+  protectedFacts: string[] = []
+): string {
+  const factsText =
+    protectedFacts.length > 0
+      ? `\n\nVERBATIM FACTS extracted from the source. These formulas, equations, units, and constants MUST appear in your output exactly as written - never reword, rearrange, or alter any number or symbol:\n${protectedFacts.join("\n")}`
+      : "";
+  return `${chunk.label}\n${chunk.text}${factsText}`;
+}
+
+function mergeTopics(
+  acc: TopicAccordion[],
+  part: TopicAccordion[]
+): TopicAccordion[] {
+  const seen = new Set(acc.map((t) => t.title.trim().toLowerCase()));
+  const out = [...acc];
+  for (const t of part) {
+    const key = t.title.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+function mergeTerms(
+  acc: TermDefinition[],
+  part: TermDefinition[]
+): TermDefinition[] {
+  const seen = new Set(acc.map((t) => t.term.trim().toLowerCase()));
+  const out = [...acc];
+  for (const t of part) {
+    const key = t.term.trim().toLowerCase();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(t);
+  }
+  return out;
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+// Runs a task once per chunk (bounded concurrency), merging and deduping
+// partial results. Summary-level fields (title/overview/keyTakeaways/conceptMap)
+// come from the first chunk that yields them; topics/terms are accumulated.
+async function runChunkedTask(
+  taskLabel: string,
+  keys: ProviderKeys,
+  modelOverrides: Partial<Record<keyof ProviderKeys, string>> | undefined,
+  preference: TaskPreference | null,
+  build: (provider: ProviderConfig) => {
+    systemPrompt: string;
+    schema: string;
+  },
+  parse: (raw: string) => ShardParts,
+  chunks: DocChunk[],
+  protectedFacts: string[],
+  failures: string[],
+  onChunk?: (done: number, total: number, topics: number, terms: number) => void
+): Promise<ShardParts | null> {
+  const results = await mapWithConcurrency(chunks, 2, async (chunk) => {
+    const res = await runTask(
+      taskLabel,
+      keys,
+      modelOverrides,
+      preference,
+      build,
+      parse,
+      chunkUserContent(chunk, protectedFacts),
+      failures
+    );
+    return res ? res.value : null;
+  });
+
+  const acc: ShardParts = {};
+  let done = 0;
+  for (const part of results) {
+    if (part) {
+      if (!acc.title && part.title) acc.title = part.title;
+      if (!acc.overview && part.overview) acc.overview = part.overview;
+      if ((!acc.keyTakeaways || acc.keyTakeaways.length === 0) && part.keyTakeaways && part.keyTakeaways.length > 0) acc.keyTakeaways = part.keyTakeaways;
+      if (!acc.conceptMap && part.conceptMap && part.conceptMap.isNeeded) acc.conceptMap = part.conceptMap;
+      
+      acc.topics = mergeTopics(acc.topics ?? [], part.topics ?? []);
+      acc.terms = mergeTerms(acc.terms ?? [], part.terms ?? []);
+    }
+    done++;
+    if (onChunk) {
+      onChunk(done, chunks.length, acc.topics?.length ?? 0, acc.terms?.length ?? 0);
+    }
+  }
+
+  if ((acc.topics?.length ?? 0) === 0 && (acc.terms?.length ?? 0) === 0) {
+    return null;
+  }
+  return acc;
+}
+
 function buildUserContent(
   docs: ExtractedDocument[],
   draft?: SourceDraft,
@@ -768,7 +1011,6 @@ export async function generateCards(
   facts: Fact[] = [],
   onProgress?: (event: string, data: any) => void
 ): Promise<CardsResult> {
-  const userContent = buildUserContent(docs, draft, protectedFacts);
   const startedAt = Date.now();
   const failures: string[] = [];
 
@@ -784,54 +1026,82 @@ export async function generateCards(
     return preferredFor(i, available);
   });
 
-  const tasks: Promise<TaskResult<ShardParts> | null>[] = [
-    runTask(
+  // Dynamic caps scale with corpus size instead of a fixed 20/100/400.
+  const totalWords = docs.reduce((s, d) => s + d.wordCount, 0) ||
+    Math.round(docs.reduce((s, d) => s + d.text.length, 0) / 6);
+  const termCap = Math.min(400, Math.max(40, Math.round(totalWords / 30)));
+  const topicCap = Math.min(80, Math.max(10, Math.round(totalWords / 150)));
+
+  const chunks = chunkDocuments(docs);
+  const totalChunkTasks = chunks.length * 2; // topics + terms
+  let chunkTasksDone = 0;
+
+  const emitProgress = (step: string, message: string, topics = 0, terms = 0) => {
+    const percent = Math.round(8 + (chunkTasksDone / Math.max(1, totalChunkTasks)) * 72);
+    onProgress?.("progress", {
+      step,
+      percent,
+      message,
+      topics,
+      terms,
+      quiz: 0,
+      chunksDone: chunkTasksDone,
+      chunksTotal: totalChunkTasks,
+    });
+  };
+
+  emitProgress("chunking", "Splitting documents into chunks...");
+
+  const tasks: Promise<ShardParts | null>[] = [
+    runChunkedTask(
       "topics",
       keys,
       modelOverrides,
       preferences[0],
-      (p) => ({
-        systemPrompt: buildTopicsPrompt(p.topicCap),
+      () => ({
+        systemPrompt: buildTopicsPrompt(topicCap),
         schema: TOPICS_SCHEMA,
       }),
-      (raw) => {
-        const t = parseTopicsPart(raw) as ShardParts;
-        if (onProgress) onProgress("topics", t);
-        return t;
-      },
-      userContent,
-      failures
+      parseTopicsPartLenient,
+      chunks,
+      protectedFacts,
+      failures,
+      (done, _total, topics) => {
+        chunkTasksDone = done;
+        emitProgress("extracting", `Finding topics (${done}/${chunks.length})...`, topics);
+      }
     ),
-    runTask(
+    runChunkedTask(
       "terms",
       keys,
       modelOverrides,
       preferences[1],
-      (p) => ({
-        systemPrompt: buildTermsPrompt(p.termCap),
+      () => ({
+        systemPrompt: buildTermsPrompt(termCap),
         schema: TERMS_SCHEMA,
       }),
-      (raw) => {
-        const t = parseTermsPart(raw) as ShardParts;
-        if (onProgress) onProgress("terms", t);
-        return t;
-      },
-      userContent,
-      failures
+      parseTermsPartLenient,
+      chunks,
+      protectedFacts,
+      failures,
+      (done, _total, _topics, terms) => {
+        chunkTasksDone = chunks.length + done;
+        emitProgress("extracting", `Finding terms (${done}/${chunks.length})...`, 0, terms);
+      }
     ),
     runTask(
       "scenario",
       keys,
       modelOverrides,
       preferences[2],
-      (p) => ({
+      () => ({
         systemPrompt: buildScenarioQuizPrompt(10), // Limit to 10 questions to save tokens
         schema: SCENARIO_QUIZ_SCHEMA,
       }),
       (raw) => parseScenarioQuizPart(raw) as ShardParts,
-      userContent,
+      buildUserContent(docs, draft, protectedFacts),
       failures
-    ),
+    ).then((r) => r?.value ?? null),
   ];
 
   const results = await Promise.all(tasks);
@@ -847,14 +1117,37 @@ export async function generateCards(
     );
   }
 
-  const parts: ShardParts = {
-    ...(topicsResult?.value ?? {}),
-    ...(termsResult?.value ?? {}),
-    ...(scenarioResult?.value ?? {}),
-  };
+  // Merge results without letting a later result's absent/empty array key
+  // overwrite a populated one from an earlier result. Object spread is not
+  // safe here because termsResult may carry an empty or missing "topics" field
+  // that would silently clobber the topics we extracted.
+  const parts: ShardParts = {};
+  if (topicsResult) {
+    if (topicsResult.title) parts.title = topicsResult.title;
+    if (topicsResult.overview) parts.overview = topicsResult.overview;
+    if (topicsResult.keyTakeaways && topicsResult.keyTakeaways.length > 0) parts.keyTakeaways = topicsResult.keyTakeaways;
+    if (topicsResult.conceptMap) parts.conceptMap = topicsResult.conceptMap;
+    if (topicsResult.topics && topicsResult.topics.length > 0) parts.topics = topicsResult.topics;
+    if (topicsResult.terms && topicsResult.terms.length > 0) parts.terms = topicsResult.terms;
+  }
+  if (termsResult) {
+    if (!parts.title && termsResult.title) parts.title = termsResult.title;
+    if (!parts.overview && termsResult.overview) parts.overview = termsResult.overview;
+    if ((!parts.keyTakeaways || parts.keyTakeaways.length === 0) && termsResult.keyTakeaways && termsResult.keyTakeaways.length > 0) parts.keyTakeaways = termsResult.keyTakeaways;
+    if (!parts.conceptMap && termsResult.conceptMap) parts.conceptMap = termsResult.conceptMap;
+    // Merge topics from termsResult only if it actually produced some
+    if (termsResult.topics && termsResult.topics.length > 0) parts.topics = mergeTopics(parts.topics ?? [], termsResult.topics);
+    // Merge terms, deduplicated
+    if (termsResult.terms && termsResult.terms.length > 0) parts.terms = mergeTerms(parts.terms ?? [], termsResult.terms);
+  }
+  if (scenarioResult) {
+    if (scenarioResult.scenarioQuestions && scenarioResult.scenarioQuestions.length > 0) parts.scenarioQuestions = scenarioResult.scenarioQuestions;
+  }
   const reviewer = assembleReviewer(docs, parts, draft, facts);
+  if (onProgress) onProgress("topics", { topics: reviewer.topics });
+  if (onProgress) onProgress("terms", { terms: reviewer.terms });
   console.log(
-    `[cards] ai ok topics:${topicsResult ? topicsResult.provider : "offline"} terms:${termsResult ? termsResult.provider : "offline"} topics=${reviewer.topics.length} terms=${reviewer.terms.length} ms=${Date.now() - startedAt}`
+    `[cards] ai ok topics=${reviewer.topics.length} terms=${reviewer.terms.length} chunks=${chunks.length} ms=${Date.now() - startedAt}`
   );
   return { reviewer };
 }

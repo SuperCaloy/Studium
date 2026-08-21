@@ -587,6 +587,17 @@ function extractTerms(
   freq.sort(
     (a, b) => termScore(b.word) - termScore(a.word) || b.count - a.count
   );
+  const sentenceCache = new Map<string, string[]>();
+  const getSentences = (t: string): string[] => {
+    let s = sentenceCache.get(t);
+    if (!s) {
+      s = splitSentences(t);
+      sentenceCache.set(t, s);
+    }
+    return s;
+  };
+  const allSentencesCached = allSentences(text, sourceDocs, getSentences);
+
   for (const fw of freq) {
     if (terms.length >= termCap) break;
     const w = fw.word.toLowerCase();
@@ -594,7 +605,7 @@ function extractTerms(
     if (candidateTerms.has(key)) continue;
     const capitalized = capTerm(w);
     if (!new RegExp(`\\b${w}`, "i").test(text)) continue;
-    const sentence = findDefinitionForWord(w, allSentences(text, sourceDocs));
+    const sentence = findDefinitionForWord(w, allSentencesCached);
     if (!sentence) continue;
     pushTerm(capitalized, sentence, findSourceDoc(sentence, sourceDocs));
     candidateTerms.add(key);
@@ -602,6 +613,7 @@ function extractTerms(
 
   for (const [docName, docText] of sourceDocs.entries()) {
     if (terms.length >= termCap) break;
+    const docSentences = getSentences(docText);
     const docFreq = computeFrequencies(docText).filter(
       (f) =>
         (isShort ? f.word.length >= 3 : f.word.length > 4) &&
@@ -616,7 +628,7 @@ function extractTerms(
       const w = fw.word.toLowerCase();
       const key = stemKey(w);
       if (candidateTerms.has(key)) continue;
-      const sentence = findDefinitionForWord(w, splitSentences(docText));
+      const sentence = findDefinitionForWord(w, docSentences);
       if (!sentence) continue;
       pushTerm(capTerm(w), sentence, docName);
       candidateTerms.add(key);
@@ -626,9 +638,13 @@ function extractTerms(
   return uniqueBy(terms, (t) => stemKey(t.term)).slice(0, termCap);
 }
 
-function allSentences(text: string, sourceDocs: Map<string, string>): string[] {
-  const sets = [splitSentences(text)];
-  for (const docText of sourceDocs.values()) sets.push(splitSentences(docText));
+function allSentences(
+  text: string,
+  sourceDocs: Map<string, string>,
+  getSentences: (t: string) => string[] = splitSentences
+): string[] {
+  const sets = [getSentences(text)];
+  for (const docText of sourceDocs.values()) sets.push(getSentences(docText));
   return unique(sets.flat());
 }
 
@@ -1263,9 +1279,10 @@ export function buildQuiz(
       (isShort ? f.word.length >= 3 : f.word.length > 4) &&
       !JUNK_TERMS.has(f.word)
   );
+  const freqSentences = splitSentences(text);
   for (const f of shuffle(freq)) {
     if (questions.length >= questionTarget) break;
-    const sentences = splitSentences(text)
+    const sentences = freqSentences
       .filter((s) => new RegExp(`\\b${escapeRegExp(f.word)}\\b`, "i").test(s))
       .filter((s) => !isQuestionLike(s))
       .slice(0, 5);
@@ -1356,7 +1373,10 @@ export interface SourceDraft {
   terms: TermDefinition[];
 }
 
-export function prepareDraft(docs: ExtractedDocument[]): {
+export function prepareDraft(
+  docs: ExtractedDocument[],
+  opts: { skipTopicTermExtraction?: boolean } = {}
+): {
   cleanedDocs: ExtractedDocument[];
   text: string;
   draft: SourceDraft;
@@ -1368,8 +1388,8 @@ export function prepareDraft(docs: ExtractedDocument[]): {
   const sourceDocs = new Map(cleanedDocs.map((d) => [d.name, d.text]));
   const wordCount = text.split(/\s+/).length;
   const isShort = wordCount < 800;
-  const termCap = Math.max(15, Math.min(isShort ? 30 : 60, Math.round(wordCount / 40)));
-  const topicCap = Math.max(5, Math.min(15, Math.round(wordCount / 250)));
+  const termCap = Math.max(20, Math.min(isShort ? 60 : 150, Math.round(wordCount / 25)));
+  const topicCap = Math.max(8, Math.min(30, Math.round(wordCount / 150)));
 
   const protectedSpans = extractProtectedSpans(text);
   const protectedFacts = protectedSpans.map((s) => s.formula);
@@ -1380,8 +1400,16 @@ export function prepareDraft(docs: ExtractedDocument[]): {
   const lines = normalizeText(text).split("\n");
   const headings = extractHeadingCandidates(lines);
 
-  const terms = extractTerms(text, sourceDocs, isShort, termCap);
-  const topics = buildTopicsForDocs(sourceDocs, terms, topicCap);
+  // The expensive offline term/topic extraction is only needed when the AI
+  // fails and we must fall back to a fully offline reviewer (which calls
+  // prepareDraft itself). Skipping it when AI will run avoids paying that
+  // NLP cost on every generation. See notes/known-issues/bugs.md P3.
+  const terms = opts.skipTopicTermExtraction
+    ? []
+    : extractTerms(text, sourceDocs, isShort, termCap);
+  const topics = opts.skipTopicTermExtraction
+    ? []
+    : buildTopicsForDocs(sourceDocs, terms, topicCap);
 
   const freqMap = new Map(freq.map((f) => [f.word, f.count]));
   const BOILERPLATE = /^(introduction|conclusion|summary|overview|glossary|references|bibliography|appendix|objectives|abstract|acknowledg?ments?|about|background|review|quiz|learning\s+objectives|learning\s+outcomes|key\s+terms|key\s+concepts|module\s+contents|contents|pretest|posttest|discussion|evaluation|activity|activities|exercise|exercises)$/i;

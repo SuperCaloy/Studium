@@ -94,8 +94,7 @@ export interface ReviewerData {
 }
 
 export type GenerationStep =
-  | "parsing"
-  | "compiling"
+  | "chunking"
   | "extracting"
   | "building"
   | "done"
@@ -105,4 +104,9 @@ export interface GenerationProgress {
   step: GenerationStep;
   percent: number;
   message: string;
+  topics: number;
+  terms: number;
+  quiz: number;
+  chunksDone: number;
+  chunksTotal: number;
 }

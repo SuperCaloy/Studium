@@ -1,6 +1,6 @@
 ---
 created: 2026-08-19
-last-updated: 2026-08-19
+last-updated: 2026-08-20
 status: verified
 ---
 
@@ -10,6 +10,10 @@ Outstanding work and improvement opportunities, including the 2026-08-19 audit f
 
 > [!note] Related
 > [[known-issues/bugs]], [[known-issues/security]], [[known-issues/dead-routes]], and [[known-issues/code-smells]] contain the detail behind several of these.
+
+## Bugfix round (DONE 2026-08-20)
+
+- **B5** setState side effects, **B9** dashboard tab reset, **B10** body-size check, **P1** quadratic splitting, **P2** generation time budget, **P3** redundant offline draft. All fixed. See [[tasks/bugfix-round-2026-08-20|Bugfix round]] and [[known-issues/bugs|Bugs]].
 
 ## Critical fixes (audit — DONE 2026-08-19, see [[known-issues/bugs|Resolved]])
 
@@ -32,8 +36,8 @@ Outstanding work and improvement opportunities, including the 2026-08-19 audit f
 - **Rate limiting** — the in-memory fallback isn't shared across instances, and `clientIp` coalesces to `"unknown"` on self-hosted deploys (one bucket for everyone). See [[security|S1]]. ✅ Partially done 2026-08-19: `clientIp` reads `x-forwarded-for`; bare `next start` still coalesces (needs a proxy or auth). Shared store via Upstash remains optional.
 - **Tests/scripts out of VCS** — `__tests__/` is git-ignored, so tests never run in CI and aren't reviewed. Consider tracking them (or at least running them in CI). ✅ DONE 2026-08-19: removed `__tests__` from `.gitignore`.
 - **Sanitize `conceptMap` + add an error boundary** — malformed AI output crashes the Concept Map tab; no boundary means a white screen. ✅ DONE 2026-08-19: sanitized in `sanitizeParts` + `components/ErrorBoundary.tsx` wraps `Dashboard`. See [[bugs|B4]].
-- **Fix quadratic sentence splitting** — `extractTerms`/`buildQuiz` re-split the full document per frequency word. See [[bugs|P1]].
-- **Time budget for generation** — `maxDuration = 60` vs Gemini timeout 120s + 429 retry can strand a stream. See [[bugs|P2]].
+- **Fix quadratic sentence splitting** — `extractTerms`/`buildQuiz` re-split the full document per frequency word. ✅ DONE 2026-08-20: splits memoized/computed once (P1).
+- **Time budget for generation** — `maxDuration = 60` vs Gemini timeout 120s + 429 retry can strand a stream. ✅ DONE 2026-08-20: `maxDuration = 300` + 240s deadline racing offline fallback (P2).
 - **Remove the skip on the live-LLM eval** — `__tests__/meta-language-eval.test.ts` contains a skipped placeholder for a live-LLM meta-language evaluation. Either implement with a real key or remove the placeholder.
 
 ## Low / housekeeping
@@ -44,7 +48,7 @@ Outstanding work and improvement opportunities, including the 2026-08-19 audit f
 - **Deduplicate `shuffle`** and split `reviewer-generator.ts` (1560 lines). See [[code-smells]].
 - **Security headers / CSP** in `next.config.mjs`. See [[security|S5]].
 - **Lint script is broken** — `npm run lint` fails with "Invalid project directory ... \lint": `next lint` was removed in Next.js 16. Either switch to `eslint` directly (needs an ESLint config + `eslint` dev dep — neither exists yet) or drop the script.
-- **Misc robustness**: guard `TutorChat` sessionStorage parse ([[bugs|B7]]), delay object-URL revoke in `ExportBar` ([[bugs|B8]]), reset `Dashboard` tab on reviewer change ([[bugs|B9]]).
+- **Misc robustness**: guard `TutorChat` sessionStorage parse (✅ B7 fixed), delay object-URL revoke in `ExportBar` (✅ B8 fixed), reset `Dashboard` tab on reviewer change (✅ B9 fixed 2026-08-20).
 
 ## Version 2 roadmap (proposed, needs scoping)
 
@@ -52,6 +56,6 @@ Outstanding work and improvement opportunities, including the 2026-08-19 audit f
 - **Per-account quotas & cost controls** — model picker, per-provider budget, response caching (ties into S1).
 - **OCR for scanned PDFs** — currently flagged `scanned` and abandoned; add server-side OCR + extraction fallback.
 - **Grounding everywhere** — apply `verify.ts`, add source citations on terms/topics.
-- **Real streaming progress** — per-task percent updates; generous `maxDuration`; no stranded streams (ties into P2).
+- **Real streaming progress** — per-task percent updates; generous `maxDuration`; no stranded streams (ties into P2). ✅ DONE 2026-08-20: dedicated `GenerationPanel` driven by real SSE `progress` events (step, percent, topics/terms/quiz counts, chunks done/total); dashboard swaps in only on `done`. See [[tasks/generation-ux-chunking-tutor]].
 - **Export breadth** — Markdown/DOCX export, printable answer keys.
 - **Reliability & process** — error boundaries, split `reviewer-generator.ts`, un-ignore tests + CI, ESLint config, a11y fixes (`userScalable: false` blocks zoom).
